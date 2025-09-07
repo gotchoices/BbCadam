@@ -51,20 +51,22 @@ class Feature:
 
     # apply
     def add(self):
-        _commit_pending_if_any()
+        _commit_pending_if_any(skip_shape=self.shape)
         _apply_add(self.shape)
         return self
 
     def cut(self):
-        _commit_pending_if_any()
+        _commit_pending_if_any(skip_shape=self.shape)
         _apply_cut(self.shape)
         return self
 
 
-def _commit_pending_if_any():
+def _commit_pending_if_any(skip_shape=None):
     pf = _STATE.get('pending_feature')
     if pf is not None:
-        _apply_add(pf)
+        # Avoid implicitly adding the same shape that is about to be applied explicitly
+        if skip_shape is not pf:
+            _apply_add(pf)
         _STATE['pending_feature'] = None
 
 
@@ -121,6 +123,10 @@ def box(size, at=None, name=None):
     if at is not None:
         feat.at(at)
     # Defer application to allow implicit add
+    # Flush any previous pending feature as an implicit add before starting a new one
+    if _STATE.get('pending_feature') is not None:
+        _apply_add(_STATE['pending_feature'])
+        _STATE['pending_feature'] = None
     _STATE['pending_feature'] = feat.shape
     return feat
 
@@ -136,6 +142,9 @@ def cylinder(d=None, r=None, h=None, at=None, name=None):
     feat = Feature(shape)
     if at is not None:
         feat.at(at)
+    if _STATE.get('pending_feature') is not None:
+        _apply_add(_STATE['pending_feature'])
+        _STATE['pending_feature'] = None
     _STATE['pending_feature'] = feat.shape
     return feat
 

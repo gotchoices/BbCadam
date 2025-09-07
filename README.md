@@ -49,4 +49,48 @@ Run the GUI watcher via launcher, or build headless with `FreeCADCmd` calling th
 
 See `api.md` for the DSL and authoring guide.
 
+## AI → Python promotion policy (guardrails)
+- Generated scripts should include a header at the top:
+  - `# model: <name>`
+  - `# generated_from: <file.md>`
+  - `# md_hash: <sha256>`
+  - `# status: draft|frozen`
+- Overwrite rules for installing generated files:
+  - If target .py does not exist → install.
+  - If header exists and `status: draft` → overwrite allowed.
+  - Otherwise → do not overwrite; write `<name>.ai.py` alongside and exit non-zero.
+- Use `BbCadam/tools/install_generated_py.sh` (Bash) to install generated scripts safely.
+
+## Scaffolding a project (for humans or AI agents)
+From an empty project folder (e.g., `kwave/`):
+```bash
+mkdir -p kwave/{config,specs/parts/caisson,specs/assemblies,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
+cat > kwave/config/settings.yaml <<'YAML'
+units: in
+exports: { step: true, stl: true }
+YAML
+cat > kwave/specs/parts/caisson/caisson.md <<'MD'
+# model: caisson
+# generated_from: caisson.md
+# md_hash: <fill>
+# status: draft
+MD
+cat > kwave/specs/parts/caisson/caisson.py <<'PY'
+def build_part(ctx):
+  # placeholder script; replace via AI or edit manually
+  box(size=(10,10,10)).add()
+PY
+```
+
+To install a newly generated part script without clobbering human-owned files:
+```bash
+bash BbCadam/tools/install_generated_py.sh /tmp/caisson.generated.py kwave/specs/parts/caisson/caisson.py
+```
+
+To launch the watcher from inside the project folder:
+```bash
+bash ../BbCadam/tools/launch_freecad_with_watcher.sh
+```
+
+
 

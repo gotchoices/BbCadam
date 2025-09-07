@@ -61,7 +61,7 @@ class SpecWatcher:
         App.Console.PrintMessage(f"[bbcadam] Watching under: {', '.join(map(str, base_dirs))}\n")
 
     def _rescan(self):
-        exts = ('.py',)
+        exts = ('.py', '.yaml', '.yml')
         current_files = set()
         current_dirs = set()
         search_roots = []
@@ -112,18 +112,51 @@ class SpecWatcher:
     def _rebuild(self, path: Path):
         try:
             if self.specs_dir.exists() and (self.specs_dir / 'parts') in path.parents:
-                build_part_script(self.repo_root, path)
+                if path.suffix.lower() == '.py':
+                    build_part_script(self.repo_root, path)
+                else:
+                    self._rebuild_part_for_params(path)
             elif self.specs_dir.exists() and (self.specs_dir / 'assemblies') in path.parents:
-                build_assembly_script(self.repo_root, path)
-            else:
-                # cwd mode: decide by folder name
-                if '/assembl' in str(path.parent).lower():
+                if path.suffix.lower() == '.py':
                     build_assembly_script(self.repo_root, path)
                 else:
-                    build_part_script(self.repo_root, path)
+                    self._rebuild_assembly_for_params(path)
+            else:
+                # cwd mode: decide by folder name
+                if path.suffix.lower() == '.py':
+                    if '/assembl' in str(path.parent).lower():
+                        build_assembly_script(self.repo_root, path)
+                    else:
+                        build_part_script(self.repo_root, path)
+                else:
+                    # params change in cwd mode: attempt local rebuild
+                    self._rebuild_part_for_params(path)
         except Exception as e:
             import traceback
             App.Console.PrintError(f"[bbcadam] Error rebuilding {path}: {e}\n{traceback.format_exc()}\n")
+
+    def _rebuild_part_for_params(self, changed: Path):
+        # Given a params change under specs/parts/<part>/, rebuild the sibling .py
+        part_dir = changed.parent if changed.is_file() else changed
+        # Prefer <dir_name>.py, else any .py in the folder
+        preferred = part_dir / f"{part_dir.name}.py"
+        if preferred.exists():
+            build_part_script(self.repo_root, preferred)
+            return
+        # fallback: first .py in dir
+        for p in part_dir.glob('*.py'):
+            build_part_script(self.repo_root, p)
+            return
+
+    def _rebuild_assembly_for_params(self, changed: Path):
+        asm_dir = changed.parent if changed.is_file() else changed
+        preferred = asm_dir / f"{asm_dir.name}.py"
+        if preferred.exists():
+            build_assembly_script(self.repo_root, preferred)
+            return
+        for p in asm_dir.glob('*.py'):
+            build_assembly_script(self.repo_root, p)
+            return
 
 
 WATCHER = None

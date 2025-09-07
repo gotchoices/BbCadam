@@ -83,6 +83,15 @@ def build_part_script(repo_root: Path, script_path: Path):
     params = _merge_params(project_params, part_params)
     settings = _safe_read(root / 'config' / 'settings.yaml') or {}
 
+    # Capture current camera (if any) to restore after rebuild
+    saved_cam = None
+    try:
+        import FreeCADGui as Gui  # type: ignore
+        if Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+            saved_cam = Gui.ActiveDocument.ActiveView.getCamera()
+    except Exception:
+        saved_cam = None
+
     # Document lifecycle
     doc_name = f'part__{part_name}'
     try:
@@ -121,7 +130,9 @@ def build_part_script(repo_root: Path, script_path: Path):
         App.Console.PrintMessage(f"[bbcadam] Rebuilt part: {script_path} → {out_fcstd}\n")
         try:
             import FreeCADGui as Gui  # type: ignore
-            if Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+            if saved_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+                Gui.ActiveDocument.ActiveView.setCamera(saved_cam)
+            elif Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
                 Gui.ActiveDocument.ActiveView.fitAll()
         except Exception:
             pass
@@ -145,6 +156,15 @@ def build_assembly_script(repo_root: Path, script_path: Path):
     asm_params = _safe_read(script_path.parent / 'params.yaml')
     params = _merge_params(project_params, asm_params)
     settings = _safe_read(root / 'config' / 'settings.yaml') or {}
+
+    # Capture current camera (if any) to restore after rebuild
+    saved_cam = None
+    try:
+        import FreeCADGui as Gui  # type: ignore
+        if Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+            saved_cam = Gui.ActiveDocument.ActiveView.getCamera()
+    except Exception:
+        saved_cam = None
 
     doc_name = f'asm__{asm_name}'
     try:
@@ -207,7 +227,9 @@ def build_assembly_script(repo_root: Path, script_path: Path):
     App.Console.PrintMessage(f"[bbcadam] Rebuilt assembly: {script_path} → {out_fcstd}\n")
     try:
         import FreeCADGui as Gui  # type: ignore
-        if Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+        if saved_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+            Gui.ActiveDocument.ActiveView.setCamera(saved_cam)
+        elif Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
             Gui.ActiveDocument.ActiveView.fitAll()
     except Exception:
         pass

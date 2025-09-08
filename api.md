@@ -48,24 +48,24 @@ Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
 ```
 
-Sketch profiles → Feature (extrusions/revolves/sweeps):
+Section profiles → Feature (extrusions/revolves/sweeps):
 ```python
-sketch(name=None, plane='XY', at=(0,0,0)) -> Sketch
+section(name=None, plane='XY', at=(0,0,0)) -> Section
 
-# 2D drawing on Sketch (fluent)
-Sketch.circle(d=None, r=None, at=(x,y))
-Sketch.rectangle(w, h=None, at=(x,y))
-Sketch.polygon(n=6, side=None, d=None, at=(x,y))
-Sketch.from_(x=None, y=None)
-Sketch.to(x=None, y=None)
-Sketch.go(dx=None, dy=None, r=None, a_deg=None)
-Sketch.arc(radius, dir='ccw', quad=None, end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
-Sketch.close()
+# 2D drawing on Section (fluent)
+Section.circle(d=None, r=None, at=(x,y))
+Section.rectangle(w, h=None, at=(x,y))
+Section.polygon(n=6, side=None, d=None, at=(x,y))
+Section.from_(x=None, y=None)
+Section.to(x=None, y=None)
+Section.go(dx=None, dy=None, r=None, a_deg=None)
+Section.arc(radius, dir='ccw', quad=None, end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
+Section.close()
 
 # 3D ops (return Feature)
-Sketch.pad(dist, dir='+Z')
-Sketch.revolve(angle_deg=360, axis='Z')
-Sketch.sweep(path_sketch)  # sweep along a path Sketch (lines/arcs)
+Section.pad(dist, dir='+Z')
+Section.revolve(angle_deg=360, axis='Z')
+Section.sweep(path_section)  # sweep along a path Section (lines/arcs)
 ```
 
 Holes: include inner profiles (e.g., `circle` inside a `rectangle`), then `pad` to produce solids with voids.

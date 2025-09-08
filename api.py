@@ -341,7 +341,7 @@ def _export_stl(obj, out_path: Path):
 
 
 # --- Sketch (Part-based profiles with holes) ---
-class Sketch:
+class Section:
     def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
         self.name = name or 'Sketch'
         self.plane = plane.upper()
@@ -686,8 +686,8 @@ class Sketch:
         return placed
 
 
-def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
-    return Sketch(name=name, plane=plane, at=at)
+def section(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+    return Section(name=name, plane=plane, at=at)
 
     def _place_geom(self, geom):
         placed = geom.copy()

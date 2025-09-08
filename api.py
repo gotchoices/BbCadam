@@ -340,3 +340,196 @@ def _export_stl(obj, out_path: Path):
         App.Console.PrintError(f"[bbcadam] STL export failed: {out_path}\n")
 
 
+# --- Sketch (Part-based profiles with holes) ---
+class Sketch:
+    def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+        self.name = name or 'Sketch'
+        self.plane = plane.upper()
+        self.origin = at
+        self._outer_wire = None
+        self._hole_wires = []
+        self._cursor = None  # last point in 2D (x,y)
+        self._first_point = None
+        self._building_hole = False
+
+    # ----- 2D primitives -----
+    def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
+        import Part
+        if r is None:
+            if d is None:
+                raise ValueError('circle requires r or d')
+            r = float(d) / 2.0
+        cx, cy = float(at[0]), float(at[1])
+        edge = Part.Edge(Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), float(r)))
+        wire = Part.Wire([edge])
+        self._add_wire(wire, hole or self._building_hole)
+        return self
+
+    def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
+        import Part
+        w = float(w)
+        h = float(h) if h is not None else w
+        cx, cy = float(at[0]), float(at[1])
+        x0, y0 = cx - w / 2.0, cy - h / 2.0
+        pts = [
+            App.Vector(x0, y0, 0),
+            App.Vector(x0 + w, y0, 0),
+            App.Vector(x0 + w, y0 + h, 0),
+            App.Vector(x0, y0 + h, 0),
+            App.Vector(x0, y0, 0),
+        ]
+        edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(4)]
+        wire = Part.Wire(edges)
+        self._add_wire(wire, hole or self._building_hole)
+        return self
+
+    def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
+        import math, Part
+        n = int(n)
+        cx, cy = float(at[0]), float(at[1])
+        if d is not None:
+            R = float(d) / 2.0
+        elif side is not None:
+            # regular polygon circumradius from side length
+            a = float(side)
+            R = a / (2.0 * math.sin(math.pi / n))
+        else:
+            R = 1.0
+        pts = [
+            App.Vector(cx + R * math.cos(2 * math.pi * i / n), cx * 0 + cy + R * math.sin(2 * math.pi * i / n), 0)
+            for i in range(n)
+        ]
+        pts.append(pts[0])
+        edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(n)]
+        wire = Part.Wire(edges)
+        self._add_wire(wire, hole or self._building_hole)
+        return self
+
+    # ----- Line builder -----
+    def from_(self, x=None, y=None, hole=False):
+        x = float(x) if x is not None else (self._cursor[0] if self._cursor else 0.0)
+        y = float(y) if y is not None else (self._cursor[1] if self._cursor else 0.0)
+        self._cursor = (x, y)
+        self._first_point = (x, y)
+        self._building_hole = bool(hole)
+        return self
+
+    def to(self, x=None, y=None):
+        if self._cursor is None:
+            raise RuntimeError('to() called before from_()')
+        nx = float(x) if x is not None else self._cursor[0]
+        ny = float(y) if y is not None else self._cursor[1]
+        self._append_segment(self._cursor, (nx, ny))
+        self._cursor = (nx, ny)
+        return self
+
+    def go(self, dx=None, dy=None, r=None, a_deg=None):
+        if self._cursor is None:
+            raise RuntimeError('go() called before from_()')
+        if r is not None and a_deg is not None:
+            import math
+            dx = float(r) * math.cos(math.radians(float(a_deg)))
+            dy = float(r) * math.sin(math.radians(float(a_deg)))
+        nx = self._cursor[0] + (float(dx) if dx is not None else 0.0)
+        ny = self._cursor[1] + (float(dy) if dy is not None else 0.0)
+        self._append_segment(self._cursor, (nx, ny))
+        self._cursor = (nx, ny)
+        return self
+
+    def close(self):
+        if self._cursor is None or self._first_point is None:
+            return self
+        if self._cursor != self._first_point:
+            self._append_segment(self._cursor, self._first_point)
+        # finalize current polyline into a wire
+        self._finalize_polyline()
+        self._cursor = None
+        self._first_point = None
+        self._building_hole = False
+        return self
+
+    # ----- 3D ops -----
+    def pad(self, dist, dir='+'):  # returns Feature
+        import Part
+        if self._cursor is not None:
+            # auto-close if user forgot
+            self.close()
+        if self._outer_wire is None:
+            raise RuntimeError('pad() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
+        # Build face with holes robustly by boolean subtract
+        face = Part.Face(self._outer_wire)
+        for hw in self._hole_wires:
+            try:
+                hole_face = Part.Face(hw)
+                face = face.cut(hole_face)
+            except Exception:
+                # if hole face fails, skip that hole
+                pass
+        # plane normal
+        dist = float(dist)
+        if self.plane == 'XY':
+            vec = App.Vector(0, 0, dist if dir.startswith('+') else -dist)
+        elif self.plane == 'XZ':
+            vec = App.Vector(0, dist if dir.startswith('+') else -dist, 0)
+        elif self.plane == 'YZ':
+            vec = App.Vector(dist if dir.startswith('+') else -dist, 0, 0)
+        else:
+            raise ValueError('Unknown plane')
+        solid = face.extrude(vec)
+        try:
+            # Ensure solidness if extrusion produced a shell
+            solid = solid.makeSolid()
+        except Exception:
+            pass
+        # place at origin offset and rotate for plane if needed
+        solid = self._place_shape(solid)
+        return Feature(solid)
+
+    # ----- helpers -----
+    def _append_segment(self, p0, p1):
+        import Part
+        a = App.Vector(float(p0[0]), float(p0[1]), 0)
+        b = App.Vector(float(p1[0]), float(p1[1]), 0)
+        edge = Part.makeLine(a, b)
+        if not hasattr(self, '_poly_edges'):
+            self._poly_edges = []
+        self._poly_edges.append(edge)
+
+    def _finalize_polyline(self):
+        import Part
+        if not getattr(self, '_poly_edges', None):
+            return
+        wire = Part.Wire(self._poly_edges)
+        self._poly_edges = []
+        self._add_wire(wire, self._building_hole)
+
+    def _add_wire(self, wire, hole):
+        # Ensure orientation: let outer be CCW, holes CW (Part.Face can tolerate)
+        if hole:
+            self._hole_wires.append(wire)
+        else:
+            if self._outer_wire is not None:
+                # For v1, only one outer wire is supported
+                raise RuntimeError('Only one outer profile is supported in pad() v1')
+            self._outer_wire = wire
+
+    def _place_shape(self, shape):
+        # Rotate shape from local XY into requested plane, then translate by origin
+        import Part
+        placed = shape.copy()
+        if self.plane == 'XY':
+            pass
+        elif self.plane == 'XZ':
+            # rotate around X axis +90 to map local Z→Y
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(1, 0, 0), 90)
+        elif self.plane == 'YZ':
+            # rotate around Y axis -90 to map local Z→X
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), -90)
+        placed.translate(_vec3(self.origin))
+        return placed
+
+
+def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+    return Sketch(name=name, plane=plane, at=at)
+
+

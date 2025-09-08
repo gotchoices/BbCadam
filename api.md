@@ -48,6 +48,28 @@ Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
 ```
 
+Sketch profiles → Feature (extrusions/revolves):
+```python
+sketch(name=None, plane='XY', at=(0,0,0)) -> Sketch
+
+# 2D drawing on Sketch (fluent)
+Sketch.circle(d=None, r=None, at=(x,y))
+Sketch.rectangle(w, h=None, at=(x,y))
+Sketch.polygon(n=6, side=None, d=None, at=(x,y))
+Sketch.from_(x=None, y=None)
+Sketch.to(x=None, y=None)
+Sketch.go(dx=None, dy=None, r=None, a_deg=None)
+Sketch.arc(radius, dir='ccw', quad=None, end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
+Sketch.close()
+
+# 3D ops (return Feature)
+Sketch.pad(dist, dir='+Z')
+Sketch.revolve(angle_deg=360, axis='Z')
+Sketch.follow(path_sketch)  # sweep along another Sketch
+```
+
+Holes: include inner profiles (e.g., `circle` inside a `rectangle`), then `pad` to produce solids with voids.
+
 Composite feature (build a tool, then apply):
 ```python
 with feature() as f:
@@ -152,5 +174,11 @@ Existing helpers `export_step(name)` and `export_stl(name)` may remain for expli
 - Fillet/chamfer helpers
 - Basic mating helpers using LCS and offsets
 - Content-hash caching to skip rebuilds when inputs unchanged
+
+## Implementation notes: Part vs Sketcher
+- Part-based approach (initial): build 2D edges/wires/faces directly via `Part` (no constraints). This is robust headless, faster, and easier to serialize. The resulting 3D solid appears as a single `Part::Feature`. We will store the 2D profile data internally for debugging.
+- Sketcher-based approach (later optional): create a `Sketcher::SketchObject` in `PartDesign::Body`, draw geometry and constraints, then pad/pocket. This yields a richer feature tree but requires PartDesign context and has more overhead. We can offer a mode to materialize a Sketcher object for inspection while still using Part ops underneath for the final solid.
+
+Default: Part-based for performance and simplicity; offer an option to `materialize_sketch=True` to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
 
 

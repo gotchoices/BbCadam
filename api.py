@@ -355,7 +355,7 @@ class SectionBackend:
 
 class PartSectionBackend(SectionBackend):
     def _build_face_with_holes(self, section):
-        return section._profile.build_face_with_holes()
+        return PartProfileAdapter(section._profile).build_face_with_holes()
 
     def pad(self, section, dist, dir='+'):
         face = self._build_face_with_holes(section)
@@ -398,8 +398,8 @@ class PartSectionBackend(SectionBackend):
     def sweep(self, section, path_section):
         import Part
         face = self._build_face_with_holes(section)
-        # Build path wire from path_section profile
-        path_wire = path_section._profile.build_open_wire()
+        # Build path wire from path_section profile via adapter
+        path_wire = PartProfileAdapter(path_section._profile).build_open_wire()
         path = path_section._place_shape(path_wire)
         first_edge = path.Edges[0]
         try:
@@ -544,6 +544,10 @@ class _SectionProfile:
         self._cursor = None
         self._first_point = None
         self._building_hole = False
+        # Backend-agnostic geometry capture (paths of line/arc ops)
+        self._geom_outer = None  # list of ops for outer path
+        self._geom_holes = []    # list of path-op lists
+        self._geom_current = None
 
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
         import Part
@@ -555,6 +559,7 @@ class _SectionProfile:
         edge = Part.Edge(Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), float(r)))
         wire = Part.Wire([edge])
         self._add_wire(wire, hole or self._building_hole)
+        # Geometry capture (circle as polygonal arc set not yet implemented)
 
     def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
         import Part
@@ -572,6 +577,11 @@ class _SectionProfile:
         edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(4)]
         wire = Part.Wire(edges)
         self._add_wire(wire, hole or self._building_hole)
+        # Geometry capture: store as a path of lines
+        path = []
+        for i in range(4):
+            path.append(('line', (float(pts[i].x), float(pts[i].y), float(pts[i+1].x), float(pts[i+1].y))))
+        self._add_geom_path(path, hole or self._building_hole)
 
     def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
         import math, Part
@@ -592,6 +602,11 @@ class _SectionProfile:
         edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(n)]
         wire = Part.Wire(edges)
         self._add_wire(wire, hole or self._building_hole)
+        # Geometry capture: polygon lines
+        path = []
+        for i in range(n):
+            path.append(('line', (float(pts[i].x), float(pts[i].y), float(pts[i+1].x), float(pts[i+1].y))))
+        self._add_geom_path(path, hole or self._building_hole)
 
     def from_(self, x=None, y=None, hole=False):
         x = float(x) if x is not None else (self._cursor[0] if self._cursor else 0.0)
@@ -599,13 +614,18 @@ class _SectionProfile:
         self._cursor = (x, y)
         self._first_point = (x, y)
         self._building_hole = bool(hole)
+        # start new geom path
+        self._geom_current = []
 
     def to(self, x=None, y=None):
         if self._cursor is None:
             raise RuntimeError('to() called before from_()')
-        nx = float(x) if x is not None else self._cursor[0]
-        ny = float(y) if y is not None else self._cursor[1]
-        self._append_segment(self._cursor, (nx, ny))
+        px, py = self._cursor
+        nx = float(x) if x is not None else px
+        ny = float(y) if y is not None else py
+        self._append_segment((px, py), (nx, ny))
+        if self._geom_current is not None:
+            self._geom_current.append(('line', (float(px), float(py), float(nx), float(ny))))
         self._cursor = (nx, ny)
 
     def go(self, dx=None, dy=None, r=None, a_deg=None):
@@ -615,9 +635,12 @@ class _SectionProfile:
             import math
             dx = float(r) * math.cos(math.radians(float(a_deg)))
             dy = float(r) * math.sin(math.radians(float(a_deg)))
-        nx = self._cursor[0] + (float(dx) if dx is not None else 0.0)
-        ny = self._cursor[1] + (float(dy) if dy is not None else 0.0)
-        self._append_segment(self._cursor, (nx, ny))
+        px, py = self._cursor
+        nx = px + (float(dx) if dx is not None else 0.0)
+        ny = py + (float(dy) if dy is not None else 0.0)
+        self._append_segment((px, py), (nx, ny))
+        if self._geom_current is not None:
+            self._geom_current.append(('line', (float(px), float(py), float(nx), float(ny))))
         self._cursor = (nx, ny)
 
     def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
@@ -671,6 +694,8 @@ class _SectionProfile:
             self._poly_edges = []
         self._poly_edges.append(edge)
         self._cursor = (ex, ey)
+        if self._geom_current is not None:
+            self._geom_current.append(('arc', dict(radius=float(radius), dir=dir, center=(float(cx), float(cy)), end=(float(ex), float(ey)))))
 
     def close(self):
         import Part
@@ -685,6 +710,10 @@ class _SectionProfile:
         self._cursor = None
         self._first_point = None
         self._building_hole = False
+        # finalize geometry path
+        if self._geom_current is not None:
+            self._add_geom_path(self._geom_current, hole=self._building_hole)
+            self._geom_current = None
 
     def _append_segment(self, p0, p1):
         import Part
@@ -705,10 +734,64 @@ class _SectionProfile:
 
     def build_face_with_holes(self):
         import Part
-        if self._outer_wire is None:
+        # Prefer wires; fallback to geometry via adapter
+        if self._outer_wire is not None:
+            face = Part.Face(self._outer_wire)
+            for hw in self._hole_wires:
+                try:
+                    face = face.cut(Part.Face(hw))
+                except Exception:
+                    pass
+            return face
+        return PartProfileAdapter(self).build_face_with_holes()
+
+    def build_open_wire(self):
+        import Part
+        if hasattr(self, '_poly_edges') and self._poly_edges:
+            return Part.Wire(self._poly_edges)
+        if self._outer_wire is not None and not self._hole_wires:
+            return Part.Wire(self._outer_wire.Edges)
+        # try geometry path (first available path)
+        if self._geom_outer:
+            return PartProfileAdapter(self).build_open_wire()
+        raise RuntimeError('No open path available in section profile')
+
+    def _add_geom_path(self, path_ops, hole=False):
+        if hole:
+            self._geom_holes.append(list(path_ops))
+        else:
+            if self._geom_outer is None:
+                self._geom_outer = list(path_ops)
+            else:
+                # treat as additional hole if outer already exists
+                self._geom_holes.append(list(path_ops))
+
+
+class PartProfileAdapter:
+    def __init__(self, profile: _SectionProfile):
+        self.p = profile
+
+    def build_face_with_holes(self):
+        import Part
+        # Build from geometry if present
+        if self.p._geom_outer:
+            outer = self._wire_from_ops(self.p._geom_outer)
+            holes = [self._wire_from_ops(h) for h in self.p._geom_holes] if self.p._geom_holes else []
+            # Also include any existing wire-based holes captured earlier (e.g., circles)
+            if getattr(self.p, '_hole_wires', None):
+                holes.extend(self.p._hole_wires)
+            face = Part.Face(outer)
+            for hw in holes:
+                try:
+                    face = face.cut(Part.Face(hw))
+                except Exception:
+                    pass
+            return face
+        # Fallback: use existing wires
+        if self.p._outer_wire is None:
             raise RuntimeError('section requires an outer profile')
-        face = Part.Face(self._outer_wire)
-        for hw in self._hole_wires:
+        face = Part.Face(self.p._outer_wire)
+        for hw in self.p._hole_wires:
             try:
                 face = face.cut(Part.Face(hw))
             except Exception:
@@ -717,11 +800,65 @@ class _SectionProfile:
 
     def build_open_wire(self):
         import Part
-        if hasattr(self, '_poly_edges') and self._poly_edges:
-            return Part.Wire(self._poly_edges)
-        if self._outer_wire is not None and not self._hole_wires:
-            return Part.Wire(self._outer_wire.Edges)
-        raise RuntimeError('No open path available in section profile')
+        # Prefer finalized outer path
+        if self.p._geom_outer:
+            return self._wire_from_ops(self.p._geom_outer)
+        # Fallback to current in-progress path (open path use-case)
+        if getattr(self.p, '_geom_current', None):
+            return self._wire_from_ops(self.p._geom_current)
+        # Last resort: use existing wires/edges if present
+        if hasattr(self.p, '_poly_edges') and self.p._poly_edges:
+            return Part.Wire(self.p._poly_edges)
+        if self.p._outer_wire is not None and not self.p._hole_wires:
+            return Part.Wire(self.p._outer_wire.Edges)
+        raise RuntimeError('No open path geometry available')
+
+    def _wire_from_ops(self, ops):
+        import Part
+        edges = []
+        for op in ops:
+            if op[0] == 'line':
+                x1, y1, x2, y2 = op[1]
+                a = App.Vector(x1, y1, 0)
+                b = App.Vector(x2, y2, 0)
+                edges.append(Part.makeLine(a, b))
+            elif op[0] == 'arc':
+                data = op[1]
+                cx, cy = data['center']
+                ex, ey = data['end']
+                if edges:
+                    sx = float(edges[-1].Vertexes[-1].Point.x)
+                    sy = float(edges[-1].Vertexes[-1].Point.y)
+                else:
+                    continue
+                R = float(data['radius'])
+                import math
+                # angles from center to start/end (note atan2(y,x))
+                a_start = math.atan2(sy - cy, sx - cx)
+                a_end = math.atan2(ey - cy, ex - cx)
+                # normalize to [0, 2pi)
+                def norm(a):
+                    while a < 0:
+                        a += 2 * math.pi
+                    while a >= 2 * math.pi:
+                        a -= 2 * math.pi
+                    return a
+                a_start = norm(a_start)
+                a_end = norm(a_end)
+                # choose mid angle based on desired sweep direction
+                direction = str(data.get('dir', 'ccw')).lower()
+                if direction == 'ccw':
+                    delta = a_end - a_start
+                    if delta < 0:
+                        delta += 2 * math.pi
+                else:  # cw
+                    delta = a_end - a_start
+                    if delta > 0:
+                        delta -= 2 * math.pi
+                a_mid = a_start + delta / 2.0
+                mid = App.Vector(cx + R * math.cos(a_mid), cy + R * math.sin(a_mid), 0)
+                edges.append(Part.Arc(App.Vector(sx, sy, 0), mid, App.Vector(ex, ey, 0)).toShape())
+        return Part.Wire(edges)
 
 
 def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 0.0, 0.0)):

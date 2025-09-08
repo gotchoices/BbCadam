@@ -4,11 +4,11 @@
 - [x] Plane support: XZ/YZ for section.pad/revolve; sweep respects path plane and auto-aligns profile normal
 - [x] Examples: mount_plate (rounded), piston (revolve), worm (sweep)
 
-- [ ] API rename: sketch() → section()
-  - [ ] Rename public API in code (BbCadam/api.py) and remove `sketch` symbol
-  - [ ] Update builder injection (inject `section` instead of `sketch`)
-  - [ ] Update examples (mount_plate.py, piston.py, worm.py) to call `section`
-  - [ ] Update docs (`api.md` and README) to use `section`
+- [x] API rename: sketch() → section()
+  - [x] Rename public API in code (BbCadam/api.py) and remove `sketch` symbol (kept as warning fallback)
+  - [x] Update builder injection (inject `section` instead of `sketch`)
+  - [x] Update examples (mount_plate.py, piston.py, worm.py) to call `section`
+  - [x] Update docs (`api.md` and README) to use `section`
 
 - [x] Section backend abstraction
   - [x] Define SectionBackend interface (pad/revolve/sweep)
@@ -16,10 +16,10 @@
   - [x] Wire Section to delegate pad/revolve/sweep to backend
   - [ ] SketcherSectionBackend: scaffold (no impl yet)
 
-- [ ] Generic Section API with materialization flag
-  - [ ] Introduce `generic_section(materialized: bool, ...)` as the single entry point
-  - [ ] Add wrappers: `section(...)` ⇒ materialized=False; `sketch(...)` ⇒ materialized=True
-  - [ ] Route to the same internal geometry pipeline; select backend based on flag
+- [x] Generic Section API with materialization flag
+  - [x] Introduce `generic_section(materialized: bool, ...)` as the single entry point
+  - [x] Add wrappers: `section(...)` ⇒ materialized=False; `sketch(...)` ⇒ materialized=True (warns/falls back)
+  - [x] Route to the same internal geometry pipeline; select backend based on flag
 
 - [ ] Internal geometry representation (backend‑agnostic)
   - [x] Created `_SectionProfile` and moved 2D ops behind a profile layer
@@ -64,6 +64,6 @@ Assessment of current design vs planned generic API
 - We have the backend layer (PartSectionBackend) and a profile layer, but `_SectionProfile` still emits Part geometry; this couples us to Part and is not fully backend‑agnostic.
 - Plan: convert `_SectionProfile` to pure numeric geometry and introduce adapters for Part/Sketcher. Add `generic_section(materialized)` with `section()/sketch()` wrappers.
 
-Current task: Convert `_SectionProfile` to backend‑agnostic geometry and add PartProfileAdapter; add `generic_section(materialized)` with `section()` and `sketch()` wrappers. Then scaffold Sketcher backend.
+Current task: None blocking for section tests. Next focus: complete backend‑agnostic geometry (circles/arc fidelity) and add SketcherProfileAdapter.
 
 

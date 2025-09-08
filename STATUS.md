@@ -1,4 +1,4 @@
-# Implementation Checklist
+# Implementation Checklist (current approach and next steps)
 
 - [x] Part-based Section DSL (formerly sketch): 2D ops (circle, rectangle, polygon, from_/to/go, arc, close); 3D ops (pad, revolve, sweep); holes; XY plane
 - [x] Plane support: XZ/YZ for section.pad/revolve; sweep respects path plane and auto-aligns profile normal
@@ -10,17 +10,31 @@
   - [ ] Update examples (mount_plate.py, piston.py, worm.py) to call `section`
   - [ ] Update docs (`api.md` and README) to use `section`
 
-- [ ] Section backend abstraction
-  - [ ] Define SectionBackend interface (2D ops + pad/revolve/sweep)
-  - [ ] Implement PartSectionBackend (current behavior)
-  - [ ] Wire `section()` to delegate to backend (default Part backend)
-  - [ ] SketcherSectionBackend: design only (no impl yet)
+- [x] Section backend abstraction
+  - [x] Define SectionBackend interface (pad/revolve/sweep)
+  - [x] Implement PartSectionBackend (current behavior)
+  - [x] Wire Section to delegate pad/revolve/sweep to backend
+  - [ ] SketcherSectionBackend: scaffold (no impl yet)
+
+- [ ] Generic Section API with materialization flag
+  - [ ] Introduce `generic_section(materialized: bool, ...)` as the single entry point
+  - [ ] Add wrappers: `section(...)` ⇒ materialized=False; `sketch(...)` ⇒ materialized=True
+  - [ ] Route to the same internal geometry pipeline; select backend based on flag
+
+- [ ] Internal geometry representation (backend‑agnostic)
+  - [x] Created `_SectionProfile` and moved 2D ops behind a profile layer
+  - [ ] Refactor `_SectionProfile` to store pure geometry (lines/arcs/circles as numbers), not Part edges
+  - [ ] Add adapters:
+    - [ ] PartProfileAdapter → builds Part wires/faces from geometry
+    - [ ] SketcherProfileAdapter → creates Sketcher::SketchObject geometry
+  - [ ] Update PartSectionBackend to use PartProfileAdapter
+  - [ ] Implement SketcherSectionBackend using SketcherProfileAdapter (materialized=True)
 
 - [ ] LCS/Datum plane targeting
-  - [ ] Accept plane strings `LCS:Name`/`Datum:Name` (and object references)
-  - [ ] Resolve datum in `ctx.doc` and derive Placement for section plane
-  - [ ] Apply datum plane Placement in pad/revolve/sweep
-  - [ ] Add example/test placing a section on a named LCS
+  - [x] Accept plane strings `LCS:Name`/`Datum:Name` (and object references)
+  - [x] Resolve datum in `ctx.doc` and derive Placement for section plane
+  - [x] Apply datum plane Placement in pad/revolve/sweep
+  - [ ] TEST: Add example placing a section on a named LCS and verify placement
 
 - [ ] Sweep orientation options
   - [ ] Add parameters: `align={'auto'|'fixed'|'frenet'}`, `up=(0,0,1)`, `use_frenet: bool`
@@ -34,8 +48,8 @@
 
 - [ ] Refactor api.py into modules (no behavior change)
   - [ ] `dsl_core.py` (Feature, param, export)
-  - [ ] `section_part.py` (2D ops, holes, pad)
-  - [ ] `sweep_revolve.py` (revolve/sweep + orientation)
+  - [ ] `profiles.py` (geometry classes: lines, arcs, circles; adapters)
+  - [ ] `section_backends/part.py` and `section_backends/sketcher.py`
   - [ ] `primitives.py` (box, cylinder)
   - [ ] `assemblies.py` (component helpers)
   - [ ] `exports.py`
@@ -46,6 +60,10 @@
   - [ ] Add examples for section.pad (holes), section.revolve (piston), section.sweep (worm)
   - [ ] Document LCS planes and sweep orientation options
 
-Current task: Plan approved → Implement API rename (sketch → section) and builder/docs/example updates; then add backend abstraction skeleton (Part backend default).
+Assessment of current design vs planned generic API
+- We have the backend layer (PartSectionBackend) and a profile layer, but `_SectionProfile` still emits Part geometry; this couples us to Part and is not fully backend‑agnostic.
+- Plan: convert `_SectionProfile` to pure numeric geometry and introduce adapters for Part/Sketcher. Add `generic_section(materialized)` with `section()/sketch()` wrappers.
+
+Current task: Convert `_SectionProfile` to backend‑agnostic geometry and add PartProfileAdapter; add `generic_section(materialized)` with `section()` and `sketch()` wrappers. Then scaffold Sketcher backend.
 
 

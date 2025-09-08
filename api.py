@@ -340,17 +340,115 @@ def _export_stl(obj, out_path: Path):
         App.Console.PrintError(f"[bbcadam] STL export failed: {out_path}\n")
 
 
-# --- Sketch (Part-based profiles with holes) ---
+# --- Section backends (abstraction for Part/Sketcher implementations) ---
+
+class SectionBackend:
+    def pad(self, section, dist, dir='+'):
+        raise NotImplementedError
+
+    def revolve(self, section, angle_deg=360.0, axis='Y'):
+        raise NotImplementedError
+
+    def sweep(self, section, path_section):
+        raise NotImplementedError
+
+
+class PartSectionBackend(SectionBackend):
+    def _build_face_with_holes(self, section):
+        return section._profile.build_face_with_holes()
+
+    def pad(self, section, dist, dir='+'):
+        face = self._build_face_with_holes(section)
+        dist = float(dist)
+        if section.plane == 'XY':
+            vec = App.Vector(0, 0, dist if dir.startswith('+') else -dist)
+        elif section.plane == 'XZ':
+            vec = App.Vector(0, dist if dir.startswith('+') else -dist, 0)
+        elif section.plane == 'YZ':
+            vec = App.Vector(dist if dir.startswith('+') else -dist, 0, 0)
+        else:
+            raise ValueError('Unknown plane')
+        solid = face.extrude(vec)
+        try:
+            solid = solid.makeSolid()
+        except Exception:
+            pass
+        solid = section._place_shape(solid)
+        return Feature(solid)
+
+    def revolve(self, section, angle_deg=360.0, axis='Y'):
+        face = self._build_face_with_holes(section)
+        ax = axis.upper()
+        if ax == 'X':
+            axis_dir = App.Vector(1, 0, 0)
+        elif ax == 'Y':
+            axis_dir = App.Vector(0, 1, 0)
+        elif ax == 'Z':
+            axis_dir = App.Vector(0, 0, 1)
+        else:
+            raise ValueError('axis must be X, Y, or Z')
+        solid = face.revolve(App.Vector(0, 0, 0), axis_dir, float(angle_deg))
+        try:
+            solid = solid.makeSolid()
+        except Exception:
+            pass
+        solid = section._place_shape(solid)
+        return Feature(solid)
+
+    def sweep(self, section, path_section):
+        import Part
+        face = self._build_face_with_holes(section)
+        # Build path wire from path_section profile
+        path_wire = path_section._profile.build_open_wire()
+        path = path_section._place_shape(path_wire)
+        first_edge = path.Edges[0]
+        try:
+            t0 = first_edge.tangentAt(first_edge.FirstParameter)
+        except Exception:
+            v0 = first_edge.Vertexes[0].Point
+            v1 = first_edge.Vertexes[-1].Point
+            t0 = App.Vector(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z)
+        if t0.Length == 0:
+            t0 = App.Vector(0, 0, 1)
+        t0.normalize()
+        start_pt = first_edge.Vertexes[0].Point
+        prof = face.copy()
+        rot = App.Rotation(App.Vector(0, 0, 1), t0)
+        pl = App.Placement()
+        pl.Rotation = rot
+        pl.Base = start_pt
+        prof.Placement = pl
+        shape = path.makePipeShell([prof.OuterWire], True, True)
+        try:
+            solids = getattr(shape, 'Solids', [])
+            if solids:
+                shape = solids[0]
+        except Exception:
+            pass
+        return Feature(shape)
+
+
+class SketcherSectionBackend(SectionBackend):
+    def pad(self, section, dist, dir='+'):
+        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
+        raise NotImplementedError
+
+    def revolve(self, section, angle_deg=360.0, axis='Y'):
+        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
+        raise NotImplementedError
+
+    def sweep(self, section, path_section):
+        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
+        raise NotImplementedError
+
+
+# --- Section (profiles with holes) ---
 class Section:
-    def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+    def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0), backend: SectionBackend | None = None):
         self.name = name or 'Sketch'
         self.plane = plane.upper()
         self.origin = at
-        self._outer_wire = None
-        self._hole_wires = []
-        self._cursor = None  # last point in 2D (x,y)
-        self._first_point = None
-        self._building_hole = False
+        self._profile = _SectionProfile()
         # Optional datum/LCS placement, resolved if plane like 'LCS:Name' or 'Datum:Name'
         self._datum_placement = None
         try:
@@ -366,8 +464,87 @@ class Section:
                             self._datum_placement = obj.Placement
         except Exception:
             pass
+        # Select backend
+        if backend is None:
+            self._backend = PartSectionBackend()
+        else:
+            self._backend = backend
 
     # ----- 2D primitives -----
+    def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
+        self._profile.circle(d=d, r=r, at=at, hole=hole)
+        return self
+
+    def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
+        self._profile.rectangle(w=w, h=h, at=at, hole=hole)
+        return self
+
+    def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
+        self._profile.polygon(n=n, side=side, d=d, at=at, hole=hole)
+        return self
+
+    # ----- Line builder -----
+    def from_(self, x=None, y=None, hole=False):
+        self._profile.from_(x=x, y=y, hole=hole)
+        return self
+
+    def to(self, x=None, y=None):
+        self._profile.to(x=x, y=y)
+        return self
+
+    def go(self, dx=None, dy=None, r=None, a_deg=None):
+        self._profile.go(dx=dx, dy=dy, r=r, a_deg=a_deg)
+        return self
+
+    def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
+        self._profile.arc(radius=radius, dir=dir, end=end, endAt=endAt, center=center, centerAt=centerAt)
+        return self
+
+    def close(self):
+        self._profile.close()
+        return self
+
+    # ----- 3D ops -----
+    def pad(self, dist, dir='+'):
+        return self._backend.pad(self, dist, dir)
+
+    def revolve(self, angle_deg=360.0, axis='Y'):
+        return self._backend.revolve(self, angle_deg, axis)
+
+    def sweep(self, path_section):
+        return self._backend.sweep(self, path_section)
+
+    # ----- helpers -----
+    def _place_shape(self, shape):
+        # Rotate shape from local XY into requested plane or datum, then translate by origin
+        placed = shape.copy()
+        # Datum/LCS placement takes precedence
+        if getattr(self, '_datum_placement', None) is not None:
+            placed.Placement = self._datum_placement
+            try:
+                off_local = App.Vector(float(self.origin[0]), float(self.origin[1]), float(self.origin[2]))
+            except Exception:
+                off_local = App.Vector(0, 0, 0)
+            off_world = self._datum_placement.Rotation.multVec(off_local)
+            placed.translate(off_world)
+            return placed
+        # Principal planes
+        if self.plane == 'XY':
+            pass
+        elif self.plane == 'XZ':
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(1, 0, 0), 90)
+        elif self.plane == 'YZ':
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), -90)
+        placed.translate(_vec3(self.origin))
+        return placed
+class _SectionProfile:
+    def __init__(self):
+        self._outer_wire = None
+        self._hole_wires = []
+        self._cursor = None
+        self._first_point = None
+        self._building_hole = False
+
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
         import Part
         if r is None:
@@ -378,7 +555,6 @@ class Section:
         edge = Part.Edge(Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), float(r)))
         wire = Part.Wire([edge])
         self._add_wire(wire, hole or self._building_hole)
-        return self
 
     def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
         import Part
@@ -396,7 +572,6 @@ class Section:
         edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(4)]
         wire = Part.Wire(edges)
         self._add_wire(wire, hole or self._building_hole)
-        return self
 
     def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
         import math, Part
@@ -405,7 +580,6 @@ class Section:
         if d is not None:
             R = float(d) / 2.0
         elif side is not None:
-            # regular polygon circumradius from side length
             a = float(side)
             R = a / (2.0 * math.sin(math.pi / n))
         else:
@@ -418,16 +592,13 @@ class Section:
         edges = [Part.makeLine(pts[i], pts[i + 1]) for i in range(n)]
         wire = Part.Wire(edges)
         self._add_wire(wire, hole or self._building_hole)
-        return self
 
-    # ----- Line builder -----
     def from_(self, x=None, y=None, hole=False):
         x = float(x) if x is not None else (self._cursor[0] if self._cursor else 0.0)
         y = float(y) if y is not None else (self._cursor[1] if self._cursor else 0.0)
         self._cursor = (x, y)
         self._first_point = (x, y)
         self._building_hole = bool(hole)
-        return self
 
     def to(self, x=None, y=None):
         if self._cursor is None:
@@ -436,7 +607,6 @@ class Section:
         ny = float(y) if y is not None else self._cursor[1]
         self._append_segment(self._cursor, (nx, ny))
         self._cursor = (nx, ny)
-        return self
 
     def go(self, dx=None, dy=None, r=None, a_deg=None):
         if self._cursor is None:
@@ -449,22 +619,13 @@ class Section:
         ny = self._cursor[1] + (float(dy) if dy is not None else 0.0)
         self._append_segment(self._cursor, (nx, ny))
         self._cursor = (nx, ny)
-        return self
 
     def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
-        """
-        Add a circular arc from current cursor to the given end point, around a given center.
-        - radius: arc radius (float)
-        - dir: 'ccw' (default) or 'cw' to choose sweep direction (shortest path)
-        - end/endAt: endpoint relative (dx,dy) or absolute (x,y)
-        - center/centerAt: center relative (dx,dy) or absolute (x,y)
-        """
         import math
         import Part
         if self._cursor is None:
             raise RuntimeError('arc() called before from_()')
         cx0, cy0 = self._cursor
-        # Determine center
         if centerAt is not None:
             cx, cy = float(centerAt[0]), float(centerAt[1])
         elif center is not None:
@@ -472,7 +633,6 @@ class Section:
             cy = cy0 + float(center[1])
         else:
             raise ValueError('arc requires center or centerAt')
-        # Determine end point
         if endAt is not None:
             ex, ey = float(endAt[0]), float(endAt[1])
         elif end is not None:
@@ -480,11 +640,9 @@ class Section:
             ey = cy0 + float(end[1])
         else:
             raise ValueError('arc requires end or endAt')
-        # Start, end, and mid points
         sx, sy = cx0, cy0
         a_start = math.atan2(sy - cy, sx - cx)
         a_end = math.atan2(ey - cy, ex - cx)
-        # Normalize angles to [0, 2pi)
         def norm(a):
             while a < 0:
                 a += 2 * math.pi
@@ -497,14 +655,12 @@ class Section:
             delta = a_end - a_start
             if delta < 0:
                 delta += 2 * math.pi
-        else:  # cw
+        else:
             delta = a_end - a_start
             if delta > 0:
                 delta -= 2 * math.pi
         a_mid = a_start + delta / 2.0
-        # Build arc via three points on circle of given radius
         R = float(radius)
-        # Trust provided radius; adjust mid point to lie on that circle
         smid_x = cx + R * math.cos(a_mid)
         smid_y = cy + R * math.sin(a_mid)
         start_v = App.Vector(sx, sy, 0)
@@ -515,149 +671,21 @@ class Section:
             self._poly_edges = []
         self._poly_edges.append(edge)
         self._cursor = (ex, ey)
-        return self
 
     def close(self):
+        import Part
         if self._cursor is None or self._first_point is None:
-            return self
+            return
         if self._cursor != self._first_point:
             self._append_segment(self._cursor, self._first_point)
-        # finalize current polyline into a wire
-        self._finalize_polyline()
+        wire = Part.Wire(self._poly_edges) if getattr(self, '_poly_edges', None) else None
+        self._poly_edges = []
+        if wire is not None:
+            self._add_wire(wire, self._building_hole)
         self._cursor = None
         self._first_point = None
         self._building_hole = False
-        return self
 
-    # ----- 3D ops -----
-    def pad(self, dist, dir='+'):  # returns Feature
-        import Part
-        if self._cursor is not None:
-            # auto-close if user forgot
-            self.close()
-        if self._outer_wire is None:
-            raise RuntimeError('pad() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
-        # Build face with holes robustly by boolean subtract
-        face = Part.Face(self._outer_wire)
-        for hw in self._hole_wires:
-            try:
-                hole_face = Part.Face(hw)
-                face = face.cut(hole_face)
-            except Exception:
-                # if hole face fails, skip that hole
-                pass
-        # plane normal
-        dist = float(dist)
-        if self.plane == 'XY':
-            vec = App.Vector(0, 0, dist if dir.startswith('+') else -dist)
-        elif self.plane == 'XZ':
-            vec = App.Vector(0, dist if dir.startswith('+') else -dist, 0)
-        elif self.plane == 'YZ':
-            vec = App.Vector(dist if dir.startswith('+') else -dist, 0, 0)
-        else:
-            raise ValueError('Unknown plane')
-        solid = face.extrude(vec)
-        try:
-            # Ensure solidness if extrusion produced a shell
-            solid = solid.makeSolid()
-        except Exception:
-            pass
-        # place at origin offset and rotate for plane if needed
-        solid = self._place_shape(solid)
-        return Feature(solid)
-
-    def revolve(self, angle_deg=360.0, axis='Y'):
-        import Part
-        if self._cursor is not None:
-            self.close()
-        if self._outer_wire is None:
-            raise RuntimeError('revolve() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
-        # Build face with holes by boolean subtract
-        face = Part.Face(self._outer_wire)
-        for hw in self._hole_wires:
-            try:
-                hole_face = Part.Face(hw)
-                face = face.cut(hole_face)
-            except Exception:
-                pass
-        axis = axis.upper()
-        if axis == 'X':
-            axis_dir = App.Vector(1, 0, 0)
-        elif axis == 'Y':
-            axis_dir = App.Vector(0, 1, 0)
-        elif axis == 'Z':
-            axis_dir = App.Vector(0, 0, 1)
-        else:
-            raise ValueError('axis must be X, Y, or Z')
-        solid = face.revolve(App.Vector(0, 0, 0), axis_dir, float(angle_deg))
-        try:
-            solid = solid.makeSolid()
-        except Exception:
-            pass
-        solid = self._place_shape(solid)
-        return Feature(solid)
-
-    def sweep(self, path_sketch):
-        """Sweep the current closed profile along a path defined by another Sketch.
-        path_sketch may contain lines and arcs (open path wire)."""
-        import Part
-        if self._cursor is not None:
-            self.close()
-        if self._outer_wire is None:
-            raise RuntimeError('sweep() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
-        # Build profile face (with holes) in local coords
-        face = Part.Face(self._outer_wire)
-        for hw in self._hole_wires:
-            try:
-                face = face.cut(Part.Face(hw))
-            except Exception:
-                pass
-        # Build path wire from path_sketch poly edges (auto-close if needed later)
-        if not hasattr(path_sketch, '_poly_edges') and path_sketch._cursor is not None:
-            path_sketch.close()
-        path_edges = []
-        if hasattr(path_sketch, '_poly_edges') and path_sketch._poly_edges:
-            path_edges.extend(path_sketch._poly_edges)
-        # Also include any explicit wires if user finalized
-        if path_sketch._outer_wire is not None and not path_sketch._hole_wires:
-            # treat as a single wire path if no holes (open path)
-            path_edges = list(path_sketch._outer_wire.Edges)
-        if not path_edges:
-            raise RuntimeError('sweep() requires a path sketch with lines/arcs')
-        path_wire = Part.Wire(path_edges)
-        # Place path into external coords
-        path = path_sketch._place_shape(path_wire)
-        # Compute start point and tangent
-        first_edge = path.Edges[0]
-        try:
-            t0 = first_edge.tangentAt(first_edge.FirstParameter)
-        except Exception:
-            # fallback approximate tangent
-            v0 = first_edge.Vertexes[0].Point
-            v1 = first_edge.Vertexes[-1].Point
-            t0 = App.Vector(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z)
-        if t0.Length == 0:
-            t0 = App.Vector(0, 0, 1)
-        t0.normalize()
-        start_pt = first_edge.Vertexes[0].Point
-        # Orient profile so its local Z aligns to tangent and move to start point
-        prof = face.copy()
-        rot = App.Rotation(App.Vector(0, 0, 1), t0)
-        pl = App.Placement()
-        pl.Rotation = rot
-        pl.Base = start_pt
-        prof.Placement = pl
-        shape = path.makePipeShell([prof.OuterWire], True, True)
-        # If the result already contains a solid, use it; otherwise return the shape as-is
-        try:
-            solids = getattr(shape, 'Solids', [])
-            if solids:
-                shape = solids[0]
-        except Exception:
-            pass
-        return Feature(shape)
-
-    # ----- helpers -----
     def _append_segment(self, p0, p1):
         import Part
         a = App.Vector(float(p0[0]), float(p0[1]), 0)
@@ -667,52 +695,47 @@ class Section:
             self._poly_edges = []
         self._poly_edges.append(edge)
 
-    def _finalize_polyline(self):
-        import Part
-        if not getattr(self, '_poly_edges', None):
-            return
-        wire = Part.Wire(self._poly_edges)
-        self._poly_edges = []
-        self._add_wire(wire, self._building_hole)
-
     def _add_wire(self, wire, hole):
-        # Ensure orientation: let outer be CCW, holes CW (Part.Face can tolerate)
         if hole:
             self._hole_wires.append(wire)
         else:
             if self._outer_wire is not None:
-                # For v1, only one outer wire is supported
-                raise RuntimeError('Only one outer profile is supported in pad() v1')
+                raise RuntimeError('Only one outer profile is supported in section v1')
             self._outer_wire = wire
 
-    def _place_shape(self, shape):
-        # Rotate shape from local XY into requested plane, then translate by origin
+    def build_face_with_holes(self):
         import Part
-        placed = shape.copy()
-        # If a datum/LCS placement is specified, apply it and translate by local offset in that frame
-        if self._datum_placement is not None:
-            placed.Placement = self._datum_placement
+        if self._outer_wire is None:
+            raise RuntimeError('section requires an outer profile')
+        face = Part.Face(self._outer_wire)
+        for hw in self._hole_wires:
             try:
-                off_local = App.Vector(float(self.origin[0]), float(self.origin[1]), float(self.origin[2]))
+                face = face.cut(Part.Face(hw))
             except Exception:
-                off_local = App.Vector(0, 0, 0)
-            off_world = self._datum_placement.Rotation.multVec(off_local)
-            placed.translate(off_world)
-            return placed
-        if self.plane == 'XY':
-            pass
-        elif self.plane == 'XZ':
-            # rotate around X axis +90 to map local Z→Y
-            placed.rotate(App.Vector(0, 0, 0), App.Vector(1, 0, 0), 90)
-        elif self.plane == 'YZ':
-            # rotate around Y axis -90 to map local Z→X
-            placed.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), -90)
-        placed.translate(_vec3(self.origin))
-        return placed
+                pass
+        return face
+
+    def build_open_wire(self):
+        import Part
+        if hasattr(self, '_poly_edges') and self._poly_edges:
+            return Part.Wire(self._poly_edges)
+        if self._outer_wire is not None and not self._hole_wires:
+            return Part.Wire(self._outer_wire.Edges)
+        raise RuntimeError('No open path available in section profile')
+
+
+def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+    backend = SketcherSectionBackend() if materialized else PartSectionBackend()
+    return Section(name=name, plane=plane, at=at, backend=backend)
 
 
 def section(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
-    return Section(name=name, plane=plane, at=at)
+    return generic_section(materialized=False, name=name, plane=plane, at=at)
+
+
+def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+    App.Console.PrintWarning('[bbcadam] sketch() (materialized Sketcher) not yet implemented; falling back to section() Part backend.\n')
+    return generic_section(materialized=False, name=name, plane=plane, at=at)
 
     def _place_geom(self, geom):
         placed = geom.copy()

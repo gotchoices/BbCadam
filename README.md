@@ -1,6 +1,8 @@
 # BbCadam — Scripted CAD Framework for FreeCAD
 
-BbCadam is a lightweight framework that lets you author parts and assemblies as Python scripts using a small, consistent DSL. It includes a GUI watcher for live rebuilds and a headless builder for CI/batch. Projects (like `kwave`) depend on BbCadam but keep their own specs, parameters, and outputs.
+BbCadam is a lightweight framework that lets you author parts and assemblies as Python scripts using a small, consistent DSL. It includes a GUI watcher for live rebuilds and a headless builder for CI/batch.
+
+This concept was originally designed using Sketchup/Ruby (before Google stopped not being evil).  FreeCad was not feasible back then.  Today, functional FreeCad and AI make a rebirth of BbCad possible!
 
 ## Goals
 - Provide an ergonomic DSL for common modeling tasks while allowing explicit escape to FreeCAD primitives when needed (light guardrails, not enforcement).

@@ -436,6 +436,72 @@ class Sketch:
         self._cursor = (nx, ny)
         return self
 
+    def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
+        """
+        Add a circular arc from current cursor to the given end point, around a given center.
+        - radius: arc radius (float)
+        - dir: 'ccw' (default) or 'cw' to choose sweep direction (shortest path)
+        - end/endAt: endpoint relative (dx,dy) or absolute (x,y)
+        - center/centerAt: center relative (dx,dy) or absolute (x,y)
+        """
+        import math
+        import Part
+        if self._cursor is None:
+            raise RuntimeError('arc() called before from_()')
+        cx0, cy0 = self._cursor
+        # Determine center
+        if centerAt is not None:
+            cx, cy = float(centerAt[0]), float(centerAt[1])
+        elif center is not None:
+            cx = cx0 + float(center[0])
+            cy = cy0 + float(center[1])
+        else:
+            raise ValueError('arc requires center or centerAt')
+        # Determine end point
+        if endAt is not None:
+            ex, ey = float(endAt[0]), float(endAt[1])
+        elif end is not None:
+            ex = cx0 + float(end[0])
+            ey = cy0 + float(end[1])
+        else:
+            raise ValueError('arc requires end or endAt')
+        # Start, end, and mid points
+        sx, sy = cx0, cy0
+        a_start = math.atan2(sy - cy, sx - cx)
+        a_end = math.atan2(ey - cy, ex - cx)
+        # Normalize angles to [0, 2pi)
+        def norm(a):
+            while a < 0:
+                a += 2 * math.pi
+            while a >= 2 * math.pi:
+                a -= 2 * math.pi
+            return a
+        a_start = norm(a_start)
+        a_end = norm(a_end)
+        if dir.lower() == 'ccw':
+            delta = a_end - a_start
+            if delta < 0:
+                delta += 2 * math.pi
+        else:  # cw
+            delta = a_end - a_start
+            if delta > 0:
+                delta -= 2 * math.pi
+        a_mid = a_start + delta / 2.0
+        # Build arc via three points on circle of given radius
+        R = float(radius)
+        # Trust provided radius; adjust mid point to lie on that circle
+        smid_x = cx + R * math.cos(a_mid)
+        smid_y = cy + R * math.sin(a_mid)
+        start_v = App.Vector(sx, sy, 0)
+        mid_v = App.Vector(smid_x, smid_y, 0)
+        end_v = App.Vector(ex, ey, 0)
+        edge = Part.Arc(start_v, mid_v, end_v).toShape()
+        if not hasattr(self, '_poly_edges'):
+            self._poly_edges = []
+        self._poly_edges.append(edge)
+        self._cursor = (ex, ey)
+        return self
+
     def close(self):
         if self._cursor is None or self._first_point is None:
             return self
@@ -485,6 +551,97 @@ class Sketch:
         solid = self._place_shape(solid)
         return Feature(solid)
 
+    def revolve(self, angle_deg=360.0, axis='Y'):
+        import Part
+        if self._cursor is not None:
+            self.close()
+        if self._outer_wire is None:
+            raise RuntimeError('revolve() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
+        # Build face with holes by boolean subtract
+        face = Part.Face(self._outer_wire)
+        for hw in self._hole_wires:
+            try:
+                hole_face = Part.Face(hw)
+                face = face.cut(hole_face)
+            except Exception:
+                pass
+        axis = axis.upper()
+        if axis == 'X':
+            axis_dir = App.Vector(1, 0, 0)
+        elif axis == 'Y':
+            axis_dir = App.Vector(0, 1, 0)
+        elif axis == 'Z':
+            axis_dir = App.Vector(0, 0, 1)
+        else:
+            raise ValueError('axis must be X, Y, or Z')
+        solid = face.revolve(App.Vector(0, 0, 0), axis_dir, float(angle_deg))
+        try:
+            solid = solid.makeSolid()
+        except Exception:
+            pass
+        solid = self._place_shape(solid)
+        return Feature(solid)
+
+    def sweep(self, path_sketch):
+        """Sweep the current closed profile along a path defined by another Sketch.
+        path_sketch may contain lines and arcs (open path wire)."""
+        import Part
+        if self._cursor is not None:
+            self.close()
+        if self._outer_wire is None:
+            raise RuntimeError('sweep() requires an outer profile (use rectangle/circle/polygon or from_/to/close)')
+        # Build profile face (with holes) in local coords
+        face = Part.Face(self._outer_wire)
+        for hw in self._hole_wires:
+            try:
+                face = face.cut(Part.Face(hw))
+            except Exception:
+                pass
+        # Build path wire from path_sketch poly edges (auto-close if needed later)
+        if not hasattr(path_sketch, '_poly_edges') and path_sketch._cursor is not None:
+            path_sketch.close()
+        path_edges = []
+        if hasattr(path_sketch, '_poly_edges') and path_sketch._poly_edges:
+            path_edges.extend(path_sketch._poly_edges)
+        # Also include any explicit wires if user finalized
+        if path_sketch._outer_wire is not None and not path_sketch._hole_wires:
+            # treat as a single wire path if no holes (open path)
+            path_edges = list(path_sketch._outer_wire.Edges)
+        if not path_edges:
+            raise RuntimeError('sweep() requires a path sketch with lines/arcs')
+        path_wire = Part.Wire(path_edges)
+        # Place path into external coords
+        path = path_sketch._place_shape(path_wire)
+        # Compute start point and tangent
+        first_edge = path.Edges[0]
+        try:
+            t0 = first_edge.tangentAt(first_edge.FirstParameter)
+        except Exception:
+            # fallback approximate tangent
+            v0 = first_edge.Vertexes[0].Point
+            v1 = first_edge.Vertexes[-1].Point
+            t0 = App.Vector(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z)
+        if t0.Length == 0:
+            t0 = App.Vector(0, 0, 1)
+        t0.normalize()
+        start_pt = first_edge.Vertexes[0].Point
+        # Orient profile so its local Z aligns to tangent and move to start point
+        prof = face.copy()
+        rot = App.Rotation(App.Vector(0, 0, 1), t0)
+        pl = App.Placement()
+        pl.Rotation = rot
+        pl.Base = start_pt
+        prof.Placement = pl
+        shape = path.makePipeShell([prof.OuterWire], True, True)
+        # If the result already contains a solid, use it; otherwise return the shape as-is
+        try:
+            solids = getattr(shape, 'Solids', [])
+            if solids:
+                shape = solids[0]
+        except Exception:
+            pass
+        return Feature(shape)
+
     # ----- helpers -----
     def _append_segment(self, p0, p1):
         import Part
@@ -531,5 +688,17 @@ class Sketch:
 
 def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
     return Sketch(name=name, plane=plane, at=at)
+
+    def _place_geom(self, geom):
+        placed = geom.copy()
+        if self.plane == 'XY':
+            pass
+        elif self.plane == 'XZ':
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(1, 0, 0), 90)
+        elif self.plane == 'YZ':
+            placed.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), -90)
+        placed.translate(_vec3(self.origin))
+        return placed
+
 
 

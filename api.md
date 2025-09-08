@@ -48,7 +48,7 @@ Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
 ```
 
-Sketch profiles → Feature (extrusions/revolves):
+Sketch profiles → Feature (extrusions/revolves/sweeps):
 ```python
 sketch(name=None, plane='XY', at=(0,0,0)) -> Sketch
 
@@ -65,7 +65,7 @@ Sketch.close()
 # 3D ops (return Feature)
 Sketch.pad(dist, dir='+Z')
 Sketch.revolve(angle_deg=360, axis='Z')
-Sketch.follow(path_sketch)  # sweep along another Sketch
+Sketch.sweep(path_sketch)  # sweep along a path Sketch (lines/arcs)
 ```
 
 Holes: include inner profiles (e.g., `circle` inside a `rectangle`), then `pad` to produce solids with voids.
@@ -180,5 +180,9 @@ Existing helpers `export_step(name)` and `export_stl(name)` may remain for expli
 - Sketcher-based approach (later optional): create a `Sketcher::SketchObject` in `PartDesign::Body`, draw geometry and constraints, then pad/pocket. This yields a richer feature tree but requires PartDesign context and has more overhead. We can offer a mode to materialize a Sketcher object for inspection while still using Part ops underneath for the final solid.
 
 Default: Part-based for performance and simplicity; offer an option to `materialize_sketch=True` to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
+
+### Sweep orientation behavior
+- By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.
+- Future options planned: `use_frenet`, `up` vector, and `align={'auto'|'fixed'|'frenet'}` to control orientation and twist behavior.
 
 

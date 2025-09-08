@@ -351,6 +351,21 @@ class Section:
         self._cursor = None  # last point in 2D (x,y)
         self._first_point = None
         self._building_hole = False
+        # Optional datum/LCS placement, resolved if plane like 'LCS:Name' or 'Datum:Name'
+        self._datum_placement = None
+        try:
+            if isinstance(plane, str):
+                p = plane.strip()
+                key = p.split(':', 1)[0]
+                if key in ('LCS', 'Datum', 'DATUM') and ':' in p:
+                    obj_name = p.split(':', 1)[1]
+                    doc = _CTX.doc if _CTX else None
+                    if doc:
+                        obj = doc.getObject(obj_name)
+                        if obj and hasattr(obj, 'Placement'):
+                            self._datum_placement = obj.Placement
+        except Exception:
+            pass
 
     # ----- 2D primitives -----
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
@@ -674,6 +689,16 @@ class Section:
         # Rotate shape from local XY into requested plane, then translate by origin
         import Part
         placed = shape.copy()
+        # If a datum/LCS placement is specified, apply it and translate by local offset in that frame
+        if self._datum_placement is not None:
+            placed.Placement = self._datum_placement
+            try:
+                off_local = App.Vector(float(self.origin[0]), float(self.origin[1]), float(self.origin[2]))
+            except Exception:
+                off_local = App.Vector(0, 0, 0)
+            off_world = self._datum_placement.Rotation.multVec(off_local)
+            placed.translate(off_world)
+            return placed
         if self.plane == 'XY':
             pass
         elif self.plane == 'XZ':

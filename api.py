@@ -429,17 +429,32 @@ class PartSectionBackend(SectionBackend):
 
 
 class SketcherSectionBackend(SectionBackend):
+    def _materialize_sketch(self, section):
+        try:
+            adapter = SketcherProfileAdapter(section)
+            sk = adapter.build_sketch()
+            return sk
+        except Exception as e:
+            App.Console.PrintWarning(f"[bbcadam] Sketcher materialization failed: {e}\n")
+            return None
+
     def pad(self, section, dist, dir='+'):
-        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
-        raise NotImplementedError
+        # Materialize for inspection, but build solid via Part backend for now
+        self._materialize_sketch(section)
+        return PartSectionBackend().pad(section, dist, dir)
 
     def revolve(self, section, angle_deg=360.0, axis='Y'):
-        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
-        raise NotImplementedError
+        self._materialize_sketch(section)
+        return PartSectionBackend().revolve(section, angle_deg, axis)
 
     def sweep(self, section, path_section):
-        App.Console.PrintWarning('[bbcadam] Sketcher backend not yet implemented; use section() (Part backend) for now.\n')
-        raise NotImplementedError
+        self._materialize_sketch(section)
+        # Also materialize path section
+        try:
+            SketcherProfileAdapter(path_section).build_sketch(name=(path_section.name or 'Path'))
+        except Exception:
+            pass
+        return PartSectionBackend().sweep(section, path_section)
 
 
 # --- Section (profiles with holes) ---
@@ -861,6 +876,109 @@ class PartProfileAdapter:
         return Part.Wire(edges)
 
 
+class SketcherProfileAdapter:
+    def __init__(self, section: 'Section'):
+        self.section = section
+        self.profile = section._profile
+
+    def build_sketch(self, name=None):
+        doc = _CTX.doc
+        sk_name = name or (self.section.name or 'Sketch')
+        try:
+            sk = doc.addObject('Sketcher::SketchObject', sk_name)
+        except Exception as e:
+            raise RuntimeError(f'Cannot create Sketcher object: {e}')
+        # Placement per section plane/datum
+        pl = App.Placement()
+        if getattr(self.section, '_datum_placement', None) is not None:
+            pl = self.section._datum_placement
+        else:
+            if self.section.plane == 'XY':
+                pass
+            elif self.section.plane == 'XZ':
+                pl.Rotation = App.Rotation(App.Vector(1, 0, 0), 90)
+            elif self.section.plane == 'YZ':
+                pl.Rotation = App.Rotation(App.Vector(0, 1, 0), -90)
+            pl.Base = _vec3(self.section.origin)
+        sk.Placement = pl
+        # Populate geometry from profile paths (outer first, then holes)
+        def add_path(ops):
+            import Part, math
+            last = None
+            for op in ops:
+                if op[0] == 'line':
+                    x1, y1, x2, y2 = op[1]
+                    seg = Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0))
+                    sk.addGeometry(seg, False)
+                    last = (x2, y2)
+                elif op[0] == 'arc':
+                    data = op[1]
+                    cx, cy = data['center']
+                    ex, ey = data['end']
+                    if last is None:
+                        continue
+                    sx, sy = last
+                    # build arc params
+                    circle = Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), float(data['radius']))
+                    a_start = math.atan2(sy - cy, sx - cx)
+                    a_end = math.atan2(ey - cy, ex - cx)
+                    # normalize
+                    def norm(a):
+                        while a < 0:
+                            a += 2 * math.pi
+                        while a >= 2 * math.pi:
+                            a -= 2 * math.pi
+                        return a
+                    a_start = norm(a_start)
+                    a_end = norm(a_end)
+                    direction = str(data.get('dir', 'ccw')).lower()
+                    if direction == 'ccw':
+                        if a_end < a_start:
+                            a_end += 2 * math.pi
+                        arc = Part.ArcOfCircle(circle, a_start, a_end)
+                    else:
+                        if a_start < a_end:
+                            a_start += 2 * math.pi
+                        arc = Part.ArcOfCircle(circle, a_start, a_end)
+                    sk.addGeometry(arc, False)
+                    last = (ex, ey)
+
+        # Use finalized outer path if present, else in-progress open path; fallback to wire-based outer
+        ops = self.profile._geom_outer if self.profile._geom_outer else getattr(self.profile, '_geom_current', None)
+        if ops:
+            add_path(ops)
+        elif getattr(self.profile, '_outer_wire', None) is not None:
+            try:
+                for e in self.profile._outer_wire.Edges:
+                    if hasattr(e, 'Curve') and e.Curve.__class__.__name__ == 'Circle':
+                        sk.addGeometry(e.Curve, False)
+                    else:
+                        sk.addGeometry(e, False)
+            except Exception:
+                pass
+        for hole_ops in (self.profile._geom_holes or []):
+            add_path(hole_ops)
+        # also include any pre-existing wire-based holes (e.g., full circle)
+        if getattr(self.profile, '_hole_wires', None):
+            for hw in self.profile._hole_wires:
+                try:
+                    for e in hw.Edges if hasattr(hw, 'Edges') else []:
+                        # If it's a circle edge, add the circle geometry; otherwise approximate as a line segment
+                        if hasattr(e, 'Curve') and e.Curve.__class__.__name__ == 'Circle':
+                            sk.addGeometry(e.Curve, False)
+                        else:
+                            sk.addGeometry(e, False)
+                except Exception:
+                    pass
+        try:
+            doc.recompute()
+            if hasattr(sk, 'ViewObject'):
+                sk.ViewObject.Visibility = True
+        except Exception:
+            pass
+        return sk
+
+
 def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
     backend = SketcherSectionBackend() if materialized else PartSectionBackend()
     return Section(name=name, plane=plane, at=at, backend=backend)
@@ -871,8 +989,7 @@ def section(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
 
 
 def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
-    App.Console.PrintWarning('[bbcadam] sketch() (materialized Sketcher) not yet implemented; falling back to section() Part backend.\n')
-    return generic_section(materialized=False, name=name, plane=plane, at=at)
+    return generic_section(materialized=True, name=name, plane=plane, at=at)
 
     def _place_geom(self, geom):
         placed = geom.copy()

@@ -112,7 +112,7 @@ def build_part_script(repo_root: Path, script_path: Path):
 
     mod = _load_script(script_path)
     # Inject DSL symbols so scripts can call them without explicit imports
-    for _name in ['box', 'cylinder', 'feature', 'section', 'lcs', 'add_lcs', 'param', 'export', 'export_step', 'export_stl']:
+    for _name in ['box', 'cylinder', 'feature', 'section', 'sketch', 'generic_section', 'lcs', 'add_lcs', 'param', 'export', 'export_step', 'export_stl']:
         try:
             setattr(mod, _name, getattr(dsl, _name))
         except Exception:

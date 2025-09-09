@@ -56,9 +56,10 @@
   - [ ] Re-export in `BbCadam/__init__.py`
 
 - [ ] Documentation
-  - [ ] Update `api.md` for rename: section
+  - [x] Update `api.md` for rename: section and add `sketch(visible=...)`
   - [ ] Add examples for section.pad (holes), section.revolve (piston), section.sweep (worm)
   - [ ] Document LCS planes and sweep orientation options
+  - [x] Document arc validation (dir/radius, circle membership, degenerate/full-circle)
 
 Assessment of current design vs planned generic API
 - We have the backend layer (PartSectionBackend) and a profile layer, but `_SectionProfile` still emits Part geometry; this couples us to Part and is not fully backend‑agnostic.

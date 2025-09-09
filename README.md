@@ -16,6 +16,7 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
   - `Feature.translate(...).rotate(...).add()/cut()`
   - `lcs(name, at, rot_xyz_deg)` (alias `add_lcs`)
   - Implicit add and end-of-build flush of pending features
+  - Sections/Sketches: `section(...)` for Part-based profiles; `sketch(..., visible=True|False)` to materialize a Sketcher object for inspection
   - Assemblies: `component(path, as_name).at(...).rot_xyz_deg(...)`
   - Exports: `export()` resolves via param/settings or `export(['step','stl'])`
 - GUI watcher macro that rebuilds on file save and exports STEP/STL (configurable).
@@ -49,7 +50,7 @@ kwave/
 
 Run the GUI watcher via launcher, or build headless with `FreeCADCmd` calling the shared builder.
 
-See `api.md` for the DSL and authoring guide.
+See `api.md` for the DSL and authoring guide, including arc input validation rules and the `sketch(visible=...)` flag.
 
 ## AI → Python promotion policy (guardrails)
 - Generated scripts should include a header at the top:

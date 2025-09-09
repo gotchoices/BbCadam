@@ -51,6 +51,7 @@ Feature.cut()      # subtract from current solid
 Section profiles → Feature (extrusions/revolves/sweeps):
 ```python
 section(name=None, plane='XY', at=(0,0,0)) -> Section
+sketch(name=None, plane='XY', at=(0,0,0), visible=True) -> Section  # materializes Sketcher object; visibility controllable
 
 # 2D drawing on Section (fluent)
 Section.circle(d=None, r=None, at=(x,y))
@@ -59,7 +60,7 @@ Section.polygon(n=6, side=None, d=None, at=(x,y))
 Section.from_(x=None, y=None)
 Section.to(x=None, y=None)
 Section.go(dx=None, dy=None, r=None, a_deg=None)
-Section.arc(radius, dir='ccw', quad=None, end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
+Section.arc(radius, dir='ccw', end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
 Section.close()
 
 # 3D ops (return Feature)
@@ -179,7 +180,13 @@ Existing helpers `export_step(name)` and `export_stl(name)` may remain for expli
 - Part-based approach (initial): build 2D edges/wires/faces directly via `Part` (no constraints). This is robust headless, faster, and easier to serialize. The resulting 3D solid appears as a single `Part::Feature`. We will store the 2D profile data internally for debugging.
 - Sketcher-based approach (later optional): create a `Sketcher::SketchObject` in `PartDesign::Body`, draw geometry and constraints, then pad/pocket. This yields a richer feature tree but requires PartDesign context and has more overhead. We can offer a mode to materialize a Sketcher object for inspection while still using Part ops underneath for the final solid.
 
-Default: Part-based for performance and simplicity; offer an option to `materialize_sketch=True` to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
+Default: Part-based for performance and simplicity; use `sketch(...)` (instead of `section(...)`) to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). You can control visibility via `sketch(..., visible=True|False)`. Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
+
+### Arc input validation
+- dir must be `'ccw'` or `'cw'`; radius must be > 0
+- Start and end must lie on the circle defined by `center` and `radius` (combined absolute/relative tolerance ~1e-4)
+- Degenerate sweeps (near zero) are rejected
+- Full-circle via `arc()` is rejected; use `circle()` for closed circles
 
 ### Sweep orientation behavior
 - By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.

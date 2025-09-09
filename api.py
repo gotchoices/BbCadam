@@ -459,11 +459,13 @@ class SketcherSectionBackend(SectionBackend):
 
 # --- Section (profiles with holes) ---
 class Section:
-    def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0), backend: SectionBackend | None = None):
+    def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0), backend: SectionBackend | None = None, visible: bool = True):
         self.name = name or 'Sketch'
         self.plane = plane.upper()
         self.origin = at
         self._profile = _SectionProfile()
+        # Sketcher-only: whether to show materialized sketch in tree
+        self._sketch_visible = bool(visible)
         # Optional datum/LCS placement, resolved if plane like 'LCS:Name' or 'Datum:Name'
         self._datum_placement = None
         try:
@@ -1004,23 +1006,23 @@ class SketcherProfileAdapter:
         try:
             doc.recompute()
             if hasattr(sk, 'ViewObject'):
-                sk.ViewObject.Visibility = True
+                sk.ViewObject.Visibility = bool(getattr(self.section, '_sketch_visible', True))
         except Exception:
             pass
         return sk
 
 
-def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 0.0, 0.0), visible: bool = True):
     backend = SketcherSectionBackend() if materialized else PartSectionBackend()
-    return Section(name=name, plane=plane, at=at, backend=backend)
+    return Section(name=name, plane=plane, at=at, backend=backend, visible=visible)
 
 
 def section(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
     return generic_section(materialized=False, name=name, plane=plane, at=at)
 
 
-def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
-    return generic_section(materialized=True, name=name, plane=plane, at=at)
+def sketch(name=None, plane='XY', at=(0.0, 0.0, 0.0), visible: bool = True):
+    return generic_section(materialized=True, name=name, plane=plane, at=at, visible=visible)
 
     def _place_geom(self, geom):
         placed = geom.copy()

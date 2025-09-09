@@ -48,7 +48,18 @@ kwave/
   exports/{step,stl}/{parts,assemblies}/
 ```
 
-Run the GUI watcher via launcher, or build headless with `FreeCADCmd` calling the shared builder.
+Run the GUI watcher via launcher, or build headless with the wrappers:
+```bash
+# GUI + watcher (auto-detects FreeCAD):
+bash BbCadam/tools/launch_freecad_with_watcher.sh --project kwave
+
+# Headless build (auto-detects FreeCADCmd):
+bash BbCadam/tools/build_headless.sh kwave/specs/parts/lagoon/lagoon.py
+
+# Debug dump (JSON bbox/faces/edges/volume):
+bash BbCadam/tools/dump.sh kwave/specs/parts/lagoon/lagoon.py
+cat kwave/build/debug/lagoon.json
+```
 
 See `api.md` for the DSL and authoring guide, including arc input validation rules and the `sketch(visible=...)` flag.
 

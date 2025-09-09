@@ -396,6 +396,8 @@ class PartSectionBackend(SectionBackend):
     def pad(self, section, dist, dir='+'):
         face = self._build_face_with_holes(section)
         dist = float(dist)
+        # Place the face into world first, then extrude along the world normal for the plane
+        placed_face = section._place_shape(face)
         if section.plane == 'XY':
             vec = App.Vector(0, 0, dist if dir.startswith('+') else -dist)
         elif section.plane == 'XZ':
@@ -404,12 +406,11 @@ class PartSectionBackend(SectionBackend):
             vec = App.Vector(dist if dir.startswith('+') else -dist, 0, 0)
         else:
             raise ValueError('Unknown plane')
-        solid = face.extrude(vec)
+        solid = placed_face.extrude(vec)
         try:
             solid = solid.makeSolid()
         except Exception:
             pass
-        solid = section._place_shape(solid)
         return Feature(solid)
 
     def revolve(self, section, angle_deg=360.0, axis='Y'):
@@ -523,34 +524,68 @@ class Section:
         else:
             self._backend = backend
 
+    def _map_xy(self, x, y):
+        # For YZ plane, interpret user inputs as (y, z)
+        if self.plane == 'YZ':
+            return (y, x)
+        return (x, y)
+
+    def _map_tuple(self, p):
+        if p is None:
+            return None
+        if self.plane == 'YZ':
+            return (p[1], p[0])
+        return p
+
     # ----- 2D primitives -----
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
-        self._profile.circle(d=d, r=r, at=at, hole=hole)
+        at_m = self._map_tuple(at)
+        self._profile.circle(d=d, r=r, at=at_m, hole=hole)
         return self
 
     def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
-        self._profile.rectangle(w=w, h=h, at=at, hole=hole)
+        at_m = self._map_tuple(at)
+        self._profile.rectangle(w=w, h=h, at=at_m, hole=hole)
         return self
 
     def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
-        self._profile.polygon(n=n, side=side, d=d, at=at, hole=hole)
+        at_m = self._map_tuple(at)
+        self._profile.polygon(n=n, side=side, d=d, at=at_m, hole=hole)
         return self
 
     # ----- Line builder -----
     def from_(self, x=None, y=None, hole=False):
-        self._profile.from_(x=x, y=y, hole=hole)
+        mx, my = self._map_xy(x, y)
+        self._profile.from_(x=mx, y=my, hole=hole)
         return self
 
     def to(self, x=None, y=None):
-        self._profile.to(x=x, y=y)
+        mx, my = self._map_xy(x, y)
+        self._profile.to(x=mx, y=my)
         return self
 
     def go(self, dx=None, dy=None, r=None, a_deg=None):
-        self._profile.go(dx=dx, dy=dy, r=r, a_deg=a_deg)
+        if self.plane == 'YZ':
+            # Interpret user (dy, dz). Map to internal (dx, dy)
+            if r is not None and a_deg is not None:
+                import math
+                dx0 = float(r) * math.cos(math.radians(float(a_deg)))
+                dy0 = float(r) * math.sin(math.radians(float(a_deg)))
+                mdx, mdy = dy0, dx0
+                self._profile.go(dx=mdx, dy=mdy)
+            else:
+                mdx, mdy = (dy, dx)
+                self._profile.go(dx=mdx, dy=mdy)
+        else:
+            self._profile.go(dx=dx, dy=dy, r=r, a_deg=a_deg)
         return self
 
     def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
-        self._profile.arc(radius=radius, dir=dir, end=end, endAt=endAt, center=center, centerAt=centerAt)
+        end_m = self._map_tuple(end)
+        endAt_m = self._map_tuple(endAt)
+        center_m = self._map_tuple(center)
+        centerAt_m = self._map_tuple(centerAt)
+        self._profile.arc(radius=radius, dir=dir, end=end_m, endAt=endAt_m, center=center_m, centerAt=centerAt_m)
         return self
 
     def close(self):
@@ -590,6 +625,42 @@ class Section:
             placed.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), -90)
         placed.translate(_vec3(self.origin))
         return placed
+    
+    def show(self, as_wire: bool = True):
+        """Materialize the 2D profile for debugging without a 3D op.
+        - If using Sketcher backend, creates a Sketcher::SketchObject.
+        - Otherwise, creates a Part::Feature with an open wire (or face if available).
+        Returns the created FreeCAD object or None on failure.
+        """
+        doc = _CTX.doc if _CTX else None
+        if not doc:
+            return None
+        # Sketcher materialization
+        if isinstance(self._backend, SketcherSectionBackend):
+            try:
+                return SketcherProfileAdapter(self).build_sketch(name=(self.name or 'Sketch'))
+            except Exception as e:
+                App.Console.PrintWarning(f"[bbcadam] show() sketch failed: {e}\n")
+                return None
+        # Part wire/face materialization
+        try:
+            # Prefer open wire for in-progress paths; fallback to face if closed
+            shape = None
+            try:
+                shape = PartProfileAdapter(self._profile).build_open_wire()
+            except Exception:
+                shape = PartProfileAdapter(self._profile).build_face_with_holes()
+            shape = self._place_shape(shape)
+            obj = doc.addObject('Part::Feature', (self.name or 'Section'))
+            obj.Shape = shape
+            try:
+                doc.recompute()
+            except Exception:
+                pass
+            return obj
+        except Exception as e:
+            App.Console.PrintWarning(f"[bbcadam] show() part failed: {e}\n")
+            return None
 class _SectionProfile:
     def __init__(self):
         self._outer_wire = None
@@ -784,17 +855,25 @@ class _SectionProfile:
         if self._cursor is None or self._first_point is None:
             return
         if self._cursor != self._first_point:
+            # Add closing edge to physical edges
             self._append_segment(self._cursor, self._first_point)
+            # Also record closing edge in geometry path for adapters/show()
+            if self._geom_current is not None:
+                px, py = self._cursor
+                qx, qy = self._first_point
+                self._geom_current.append(('line', (float(px), float(py), float(qx), float(qy))))
         wire = Part.Wire(self._poly_edges) if getattr(self, '_poly_edges', None) else None
         self._poly_edges = []
         if wire is not None:
             self._add_wire(wire, self._building_hole)
+        # Preserve current hole state for path recording
+        current_hole = self._building_hole
         self._cursor = None
         self._first_point = None
         self._building_hole = False
         # finalize geometry path
         if self._geom_current is not None:
-            self._add_geom_path(self._geom_current, hole=self._building_hole)
+            self._add_geom_path(self._geom_current, hole=current_hole)
             self._geom_current = None
 
     def _append_segment(self, p0, p1):

@@ -37,8 +37,14 @@ if [[ ! -f "$WATCHER" ]]; then
 fi
 
 if [[ -z "$FREECAD_GUI" ]]; then
-  # Try to find default macOS app
-  if [[ -x "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD" ]]; then
+  # Try finder script (supports macOS and PATH)
+  FC_FIND="$(cd "$SCRIPT_DIR" && pwd)/find_freecad.sh"
+  if [[ -x "$FC_FIND" ]]; then
+    eval "$($FC_FIND)"
+    if [[ -n "${GUI:-}" ]]; then FREECAD_GUI="$GUI"; fi
+  fi
+  # Fallback to default macOS app
+  if [[ -z "$FREECAD_GUI" && -x "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD" ]]; then
     FREECAD_GUI="/Applications/FreeCAD.app/Contents/MacOS/FreeCAD"
   fi
 fi

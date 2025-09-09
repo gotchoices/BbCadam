@@ -1,9 +1,16 @@
 import sys
+import os
 from pathlib import Path
 
 import FreeCAD as App
 
-from ..builder import build_part_script, build_assembly_script
+# Ensure BbCadam package importable when run directly by FreeCADCmd
+HERE = Path(__file__).resolve()
+PKG_PARENT = HERE.parents[2]  # repo root (parent of BbCadam)
+if str(PKG_PARENT) not in sys.path:
+    sys.path.insert(0, str(PKG_PARENT))
+
+from BbCadam.builder import build_part_script, build_assembly_script
 
 
 def _detect_repo_root(start: Path) -> Path:
@@ -18,13 +25,37 @@ def _detect_repo_root(start: Path) -> Path:
     return Path.cwd()
 
 
+def _dump_json(obj, out_path: Path):
+    import json
+    if obj is None:
+        data = {'error': 'no object'}
+    else:
+        try:
+            sh = obj.Shape
+            b = sh.BoundBox
+            data = {
+                'name': getattr(obj, 'Name', ''),
+                'label': getattr(obj, 'Label', ''),
+                'bbox': {'xMin': b.XMin, 'xMax': b.XMax, 'yMin': b.YMin, 'yMax': b.YMax, 'zMin': b.ZMin, 'zMax': b.ZMax},
+                'numSolids': len(getattr(sh, 'Solids', [])),
+                'numFaces': len(getattr(sh, 'Faces', [])),
+                'numEdges': len(getattr(sh, 'Edges', [])),
+                'volume': getattr(sh, 'Volume', None),
+                'area': getattr(sh, 'Area', None),
+            }
+        except Exception as e:
+            data = {'error': str(e)}
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    print(f"[bbcadam] Dumped JSON: {out_path}")
+
+
 def main():
     args = sys.argv[1:]
-    if not args:
-        print('Usage: FreeCADCmd BbCadam/tools/build_headless.py [--project PATH] <spec.py> [more ...]')
-        sys.exit(2)
-    # Parse optional --project
+    # Parse optional flags
     repo_root = None
+    dump_path = None
     cleaned = []
     it = iter(args)
     for a in it:
@@ -35,17 +66,37 @@ def main():
                 print('[bbcadam] --project requires a path')
                 sys.exit(2)
             continue
+        if a == '--dump-json':
+            try:
+                dump_path = Path(next(it)).resolve()
+            except StopIteration:
+                print('[bbcadam] --dump-json requires a path')
+                sys.exit(2)
+            continue
         cleaned.append(a)
     args = cleaned
+    # Support env fallbacks
+    if not cleaned:
+        env_specs = os.environ.get('BBCADAM_SPECS')
+        if env_specs:
+            cleaned = env_specs.split(':')
+    if dump_path is None:
+        env_dump = os.environ.get('BBCADAM_DUMP_JSON')
+        if env_dump:
+            dump_path = Path(env_dump).resolve()
     if repo_root is None:
         env = os.environ.get('BB_PROJECT_ROOT')
         if env:
             repo_root = Path(env).resolve()
         else:
             # derive from first spec path
-            first = Path(args[0]).resolve()
+            if not cleaned:
+                print('Usage: FreeCADCmd BbCadam/tools/build_headless.py [--project PATH] [--dump-json PATH] <spec.py> [more ...]')
+                sys.exit(2)
+            first = Path(cleaned[0]).resolve()
             repo_root = _detect_repo_root(first.parent)
-    for arg in args:
+    last_obj = None
+    for arg in cleaned:
         path = Path(arg).resolve()
         if not path.exists():
             print(f'[bbcadam] Spec not found: {path}')
@@ -57,9 +108,17 @@ def main():
             else:
                 out = build_part_script(repo_root, path)
             print(f'[bbcadam] Built: {out}')
+            try:
+                # capture last object by name from doc
+                doc = App.ActiveDocument
+                last_obj = doc.ActiveObject if hasattr(doc, 'ActiveObject') else out
+            except Exception:
+                last_obj = out
         except Exception as e:
             import traceback
             App.Console.PrintError(f'[bbcadam] Error: {e}\n{traceback.format_exc()}\n')
+    if dump_path is not None:
+        _dump_json(last_obj, dump_path)
 
 
 if __name__ == '__main__':

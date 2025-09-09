@@ -663,6 +663,9 @@ class _SectionProfile:
         import Part
         if self._cursor is None:
             raise RuntimeError('arc() called before from_()')
+        dir_l = str(dir).lower()
+        if dir_l not in ('ccw', 'cw'):
+            raise ValueError("arc dir must be 'ccw' or 'cw'")
         cx0, cy0 = self._cursor
         if centerAt is not None:
             cx, cy = float(centerAt[0]), float(centerAt[1])
@@ -678,7 +681,27 @@ class _SectionProfile:
             ey = cy0 + float(end[1])
         else:
             raise ValueError('arc requires end or endAt')
+        # Validate radius
+        R = float(radius)
+        if not (R > 0.0):
+            raise ValueError('arc radius must be > 0')
+        # Validate that start and end lie on the circle defined by center/radius
+        ds = math.hypot(cx0 - cx, cy0 - cy)
+        de = math.hypot(ex - cx, ey - cy)
+        # Use combined absolute and relative tolerance to allow rounded inputs
+        tol_abs = 1e-4
+        tol_rel = 1e-4
+        ok_s = math.isclose(ds, R, rel_tol=tol_rel, abs_tol=tol_abs)
+        ok_e = math.isclose(de, R, rel_tol=tol_rel, abs_tol=tol_abs)
+        if not (ok_s and ok_e):
+            raise ValueError(
+                f"arc spec inconsistent: start/end not on circle; "
+                f"center=({cx},{cy}), radius={R}, start=({cx0},{cy0}) dist={ds}, end=({ex},{ey}) dist={de}"
+            )
         sx, sy = cx0, cy0
+        # Start/end distinct
+        if math.hypot(ex - sx, ey - sy) <= tol_abs:
+            raise ValueError("arc start and end coincide; use circle() for full circle or adjust end")
         a_start = math.atan2(sy - cy, sx - cx)
         a_end = math.atan2(ey - cy, ex - cx)
         def norm(a):
@@ -689,7 +712,7 @@ class _SectionProfile:
             return a
         a_start = norm(a_start)
         a_end = norm(a_end)
-        if dir.lower() == 'ccw':
+        if dir_l == 'ccw':
             delta = a_end - a_start
             if delta < 0:
                 delta += 2 * math.pi
@@ -697,8 +720,14 @@ class _SectionProfile:
             delta = a_end - a_start
             if delta > 0:
                 delta -= 2 * math.pi
+        # Reject degenerate sweeps
+        tol_ang = 1e-6
+        sweep_abs = abs(delta)
+        if sweep_abs < tol_ang:
+            raise ValueError('arc sweep too small (degenerate); adjust end or direction')
+        if abs(sweep_abs - 2 * math.pi) < tol_ang:
+            raise ValueError("full-circle arc not supported via arc(); use circle() instead")
         a_mid = a_start + delta / 2.0
-        R = float(radius)
         smid_x = cx + R * math.cos(a_mid)
         smid_y = cy + R * math.sin(a_mid)
         start_v = App.Vector(sx, sy, 0)
@@ -918,11 +947,9 @@ class SketcherProfileAdapter:
                     if last is None:
                         continue
                     sx, sy = last
-                    # build arc params
-                    circle = Part.Circle(App.Vector(cx, cy, 0), App.Vector(0, 0, 1), float(data['radius']))
+                    # compute mid-point based on direction
                     a_start = math.atan2(sy - cy, sx - cx)
                     a_end = math.atan2(ey - cy, ex - cx)
-                    # normalize
                     def norm(a):
                         while a < 0:
                             a += 2 * math.pi
@@ -933,14 +960,18 @@ class SketcherProfileAdapter:
                     a_end = norm(a_end)
                     direction = str(data.get('dir', 'ccw')).lower()
                     if direction == 'ccw':
-                        if a_end < a_start:
-                            a_end += 2 * math.pi
-                        arc = Part.ArcOfCircle(circle, a_start, a_end)
+                        delta = a_end - a_start
+                        if delta < 0:
+                            delta += 2 * math.pi
                     else:
-                        if a_start < a_end:
-                            a_start += 2 * math.pi
-                        arc = Part.ArcOfCircle(circle, a_start, a_end)
-                    sk.addGeometry(arc, False)
+                        delta = a_end - a_start
+                        if delta > 0:
+                            delta -= 2 * math.pi
+                    a_mid = a_start + delta / 2.0
+                    mid = App.Vector(cx + float(data['radius']) * math.cos(a_mid),
+                                     cy + float(data['radius']) * math.sin(a_mid), 0)
+                    arc3 = Part.Arc(App.Vector(sx, sy, 0), mid, App.Vector(ex, ey, 0))
+                    sk.addGeometry(arc3, False)
                     last = (ex, ey)
 
         # Use finalized outer path if present, else in-progress open path; fallback to wire-based outer

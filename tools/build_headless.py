@@ -31,8 +31,49 @@ def _dump_json(obj, out_path: Path):
         data = {'error': 'no object'}
     else:
         try:
-            sh = obj.Shape
-            b = sh.BoundBox
+            # Support dumping a single object with Shape, or aggregate a document's objects
+            def to_entry(o):
+                sh = getattr(o, 'Shape', None)
+                if sh is None:
+                    return None
+                b = sh.BoundBox
+                return {
+                    'name': getattr(o, 'Name', ''),
+                    'label': getattr(o, 'Label', ''),
+                    'bbox': {
+                        'xMin': b.XMin, 'xMax': b.XMax,
+                        'yMin': b.YMin, 'yMax': b.YMax,
+                        'zMin': b.ZMin, 'zMax': b.ZMax,
+                    },
+                    'numSolids': len(getattr(sh, 'Solids', [])),
+                    'numFaces': len(getattr(sh, 'Faces', [])),
+                    'numEdges': len(getattr(sh, 'Edges', [])),
+                    'volume': getattr(sh, 'Volume', None),
+                    'area': getattr(sh, 'Area', None),
+                }
+
+            entries = []
+            if hasattr(obj, 'Objects'):
+                for o in getattr(obj, 'Objects') or []:
+                    e = to_entry(o)
+                    if e:
+                        entries.append(e)
+                # union bbox
+                if entries:
+                    xs = [e['bbox']['xMin'] for e in entries] + [e['bbox']['xMax'] for e in entries]
+                    ys = [e['bbox']['yMin'] for e in entries] + [e['bbox']['yMax'] for e in entries]
+                    zs = [e['bbox']['zMin'] for e in entries] + [e['bbox']['zMax'] for e in entries]
+                    bbox = {'xMin': min(xs), 'xMax': max(xs), 'yMin': min(ys), 'yMax': max(ys), 'zMin': min(zs), 'zMax': max(zs)}
+                else:
+                    bbox = None
+                data = {
+                    'doc': getattr(obj, 'Name', ''),
+                    'bbox': bbox,
+                    'objects': entries,
+                }
+            else:
+                sh = obj.Shape
+                b = sh.BoundBox
             # Sample vertices near Y endpoints to analyze floor/side-wall alignment
             def near(a, b, tol=1e-6):
                 return abs(a - b) <= tol
@@ -51,20 +92,20 @@ def _dump_json(obj, out_path: Path):
                 if near(y, yL):
                     minZ_yL = z if minZ_yL is None else min(minZ_yL, z)
                     maxZ_yL = z if maxZ_yL is None else max(maxZ_yL, z)
-            data = {
-                'name': getattr(obj, 'Name', ''),
-                'label': getattr(obj, 'Label', ''),
-                'bbox': {'xMin': b.XMin, 'xMax': b.XMax, 'yMin': b.YMin, 'yMax': b.YMax, 'zMin': b.ZMin, 'zMax': b.ZMax},
-                'numSolids': len(getattr(sh, 'Solids', [])),
-                'numFaces': len(getattr(sh, 'Faces', [])),
-                'numEdges': len(getattr(sh, 'Edges', [])),
-                'volume': getattr(sh, 'Volume', None),
-                'area': getattr(sh, 'Area', None),
-                'samples': {
-                    'y0': {'minZ': minZ_y0, 'maxZ': maxZ_y0},
-                    'yL': {'minZ': minZ_yL, 'maxZ': maxZ_yL},
-                },
-            }
+                data = {
+                    'name': getattr(obj, 'Name', ''),
+                    'label': getattr(obj, 'Label', ''),
+                    'bbox': {'xMin': b.XMin, 'xMax': b.XMax, 'yMin': b.YMin, 'yMax': b.YMax, 'zMin': b.ZMin, 'zMax': b.ZMax},
+                    'numSolids': len(getattr(sh, 'Solids', [])),
+                    'numFaces': len(getattr(sh, 'Faces', [])),
+                    'numEdges': len(getattr(sh, 'Edges', [])),
+                    'volume': getattr(sh, 'Volume', None),
+                    'area': getattr(sh, 'Area', None),
+                    'samples': {
+                        'y0': {'minZ': minZ_y0, 'maxZ': maxZ_y0},
+                        'yL': {'minZ': minZ_yL, 'maxZ': maxZ_yL},
+                    },
+                }
         except Exception as e:
             data = {'error': str(e)}
     out_path.parent.mkdir(parents=True, exist_ok=True)

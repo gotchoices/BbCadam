@@ -61,6 +61,14 @@
   - [ ] Document LCS planes and sweep orientation options
   - [x] Document arc validation (dir/radius, circle membership, degenerate/full-circle)
 
+## Known issues / Open items
+- [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:
+  - Avoiding opening part documents during assembly linking (load shapes directly without activating docs), or
+  - Using App::Link with document path without opening the target document, or
+  - A small transaction/deferred activation mechanism in the watcher to guarantee the original active doc remains active throughout the rebuild.
+- [x] LCS duplication on part rebuilds fixed: `lcs()` now reuses existing objects by name.
+- [x] Sketch duplication fixed: Sketcher materialization reuses an existing sketch by name and clears geometry.
+
 Assessment of current design vs planned generic API
 - We have the backend layer (PartSectionBackend) and a profile layer, but `_SectionProfile` still emits Part geometry; this couples us to Part and is not fully backend‑agnostic.
 - Plan: convert `_SectionProfile` to pure numeric geometry and introduce adapters for Part/Sketcher. Add `generic_section(materialized)` with `section()/sketch()` wrappers.

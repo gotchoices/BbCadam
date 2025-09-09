@@ -232,12 +232,27 @@ def feature():
 
 # --- LCS / Datum ---
 def lcs(name, at=(0, 0, 0), rot_xyz_deg=(0, 0, 0)):
-    # Placeholder: attach a named datum by creating an empty Part::Feature with placement
+    # Create or update a named datum feature; avoid duplicates on rebuild
     doc = _CTX.doc
-    datum = doc.addObject('Part::Feature', name)
-    datum.Placement.Base = _vec3(at)
-    # Rotation placeholder; can be extended to full Placement rotation
-    return datum
+    obj = None
+    try:
+        obj = doc.getObject(name)
+    except Exception:
+        obj = None
+    if obj is None:
+        obj = doc.addObject('Part::Feature', name)
+    # Update placement
+    obj.Placement.Base = _vec3(at)
+    try:
+        rx, ry, rz = float(rot_xyz_deg[0]), float(rot_xyz_deg[1]), float(rot_xyz_deg[2])
+        if any(abs(a) > 1e-12 for a in (rx, ry, rz)):
+            rX = App.Rotation(App.Vector(1, 0, 0), rx)
+            rY = App.Rotation(App.Vector(0, 1, 0), ry)
+            rZ = App.Rotation(App.Vector(0, 0, 1), rz)
+            obj.Placement.Rotation = rZ.multiply(rY).multiply(rX)
+    except Exception:
+        pass
+    return obj
 
 
 add_lcs = lcs
@@ -1030,10 +1045,32 @@ class SketcherProfileAdapter:
     def build_sketch(self, name=None):
         doc = _CTX.doc
         sk_name = name or (self.section.name or 'Sketch')
+        # Reuse existing sketch if present to avoid duplicates on rebuild
+        sk = None
         try:
-            sk = doc.addObject('Sketcher::SketchObject', sk_name)
-        except Exception as e:
-            raise RuntimeError(f'Cannot create Sketcher object: {e}')
+            sk = doc.getObject(sk_name)
+        except Exception:
+            sk = None
+        if sk is None:
+            try:
+                sk = doc.addObject('Sketcher::SketchObject', sk_name)
+            except Exception as e:
+                raise RuntimeError(f'Cannot create Sketcher object: {e}')
+        else:
+            # Clear existing geometry and constraints
+            try:
+                for i in range(getattr(sk, 'ConstraintCount', 0) - 1, -1, -1):
+                    try:
+                        sk.removeConstraint(i)
+                    except Exception:
+                        pass
+                for i in range(getattr(sk, 'GeometryCount', 0) - 1, -1, -1):
+                    try:
+                        sk.removeGeometry(i)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         # Placement per section plane/datum
         pl = App.Placement()
         if getattr(self.section, '_datum_placement', None) is not None:

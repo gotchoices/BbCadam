@@ -110,27 +110,64 @@ class SpecWatcher:
         t.start(250)
 
     def _rebuild(self, path: Path):
+        # Capture current active doc and camera to restore after rebuild
+        orig_doc_name = None
+        orig_cam = None
+        try:
+            if Gui.ActiveDocument:
+                orig_doc_name = Gui.ActiveDocument.Name
+                if Gui.ActiveDocument.ActiveView:
+                    orig_cam = Gui.ActiveDocument.ActiveView.getCamera()
+        except Exception:
+            pass
+        should_restore = False
         try:
             if self.specs_dir.exists() and (self.specs_dir / 'parts') in path.parents:
                 if path.suffix.lower() == '.py':
                     build_part_script(self.repo_root, path)
                 else:
                     self._rebuild_part_for_params(path)
+                should_restore = False
             elif self.specs_dir.exists() and (self.specs_dir / 'assemblies') in path.parents:
                 if path.suffix.lower() == '.py':
                     build_assembly_script(self.repo_root, path)
                 else:
                     self._rebuild_assembly_for_params(path)
+                should_restore = False
             else:
                 # cwd mode: decide by folder name
                 if path.suffix.lower() == '.py':
                     if '/assembl' in str(path.parent).lower():
                         build_assembly_script(self.repo_root, path)
+                        should_restore = False
                     else:
                         build_part_script(self.repo_root, path)
+                        should_restore = False
                 else:
                     # params change in cwd mode: attempt local rebuild
                     self._rebuild_part_for_params(path)
+                    should_restore = False
+            # Restore original active document and camera on next GUI tick (assemblies only)
+            if should_restore:
+                def _restore():
+                    try:
+                        if orig_doc_name:
+                            try:
+                                App.setActiveDocument(orig_doc_name)
+                            except Exception:
+                                pass
+                            try:
+                                Gui.activateDocument(orig_doc_name)
+                            except Exception:
+                                pass
+                        if orig_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+                            Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
+                    except Exception:
+                        pass
+                try:
+                    QTimer.singleShot(0, _restore)
+                except Exception:
+                    _restore()
         except Exception as e:
             import traceback
             App.Console.PrintError(f"[bbcadam] Error rebuilding {path}: {e}\n{traceback.format_exc()}\n")

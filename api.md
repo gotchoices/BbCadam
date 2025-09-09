@@ -46,6 +46,9 @@ Feature.translate((x,y,z))
 Feature.rotate(axis=(1,0,0), deg=0)
 Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
+Feature.opacity(0..100)     # set transparency (0 opaque .. 100 fully transparent) on final object
+Feature.color((r,g,b))      # set color (floats 0..1) on final object
+Feature.appearance(color=(r,g,b), opacity=0..100)
 ```
 
 Section profiles → Feature (extrusions/revolves/sweeps):

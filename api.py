@@ -10,6 +10,7 @@ _CTX = None
 _STATE = {
     'base_shape': None,
     'pending_feature': None,
+    'view': {},
 }
 
 
@@ -60,6 +61,29 @@ class Feature:
         _apply_cut(self.shape)
         return self
 
+    # view/appearance helpers (applied to final Part object at emit time)
+    def appearance(self, color=None, opacity=None):
+        v = _STATE.get('view') or {}
+        if color is not None:
+            try:
+                r, g, b = color
+                v['color'] = (float(r), float(g), float(b))
+            except Exception:
+                pass
+        if opacity is not None:
+            try:
+                v['opacity'] = int(opacity)
+            except Exception:
+                pass
+        _STATE['view'] = v
+        return self
+
+    def color(self, color):
+        return self.appearance(color=color)
+
+    def opacity(self, opacity):
+        return self.appearance(opacity=opacity)
+
 
 def _commit_pending_if_any(skip_shape=None):
     pf = _STATE.get('pending_feature')
@@ -95,6 +119,18 @@ def _emit_result(name='Part'):
     doc = _CTX.doc
     obj = doc.addObject('Part::Feature', name)
     obj.Shape = _STATE['base_shape']
+    # Apply view settings if GUI present
+    try:
+        v = _STATE.get('view') or {}
+        if hasattr(obj, 'ViewObject') and obj.ViewObject is not None:
+            if 'opacity' in v:
+                obj.ViewObject.Transparency = int(v['opacity'])
+            if 'color' in v:
+                c = v['color']
+                # FreeCAD expects RGB floats 0..1
+                obj.ViewObject.ShapeColor = (float(c[0]), float(c[1]), float(c[2]))
+    except Exception:
+        pass
     return obj
 
 

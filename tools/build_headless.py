@@ -33,6 +33,24 @@ def _dump_json(obj, out_path: Path):
         try:
             sh = obj.Shape
             b = sh.BoundBox
+            # Sample vertices near Y endpoints to analyze floor/side-wall alignment
+            def near(a, b, tol=1e-6):
+                return abs(a - b) <= tol
+            y0 = b.YMin
+            yL = b.YMax
+            minZ_y0 = None
+            maxZ_y0 = None
+            minZ_yL = None
+            maxZ_yL = None
+            for v in getattr(sh, 'Vertexes', []):
+                y = float(v.Point.y)
+                z = float(v.Point.z)
+                if near(y, y0):
+                    minZ_y0 = z if minZ_y0 is None else min(minZ_y0, z)
+                    maxZ_y0 = z if maxZ_y0 is None else max(maxZ_y0, z)
+                if near(y, yL):
+                    minZ_yL = z if minZ_yL is None else min(minZ_yL, z)
+                    maxZ_yL = z if maxZ_yL is None else max(maxZ_yL, z)
             data = {
                 'name': getattr(obj, 'Name', ''),
                 'label': getattr(obj, 'Label', ''),
@@ -42,6 +60,10 @@ def _dump_json(obj, out_path: Path):
                 'numEdges': len(getattr(sh, 'Edges', [])),
                 'volume': getattr(sh, 'Volume', None),
                 'area': getattr(sh, 'Area', None),
+                'samples': {
+                    'y0': {'minZ': minZ_y0, 'maxZ': maxZ_y0},
+                    'yL': {'minZ': minZ_yL, 'maxZ': maxZ_yL},
+                },
             }
         except Exception as e:
             data = {'error': str(e)}

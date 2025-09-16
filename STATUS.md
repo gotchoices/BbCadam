@@ -109,3 +109,28 @@
 **Phase 1: Package Structure & Setup** - Create the foundation for a standalone package while maintaining current functionality.
 
 
+## Obsolete Files Cleanup (as replacements are validated)
+- [x] Remove `scripts/launch_freecad_with_watcher.sh` (replaced by `bbcadam-launch`)
+- [ ] Remove `scripts/build_headless.sh` (superseded by `bbcadam-build`)
+- [ ] Remove `scripts/build_headless.py` (logic migrated into `bbcadam/cli/build.py`)
+- [ ] Remove `scripts/dump.sh` (superseded by `bbcadam-dump`)
+- [ ] Remove `scripts/install_generated_py.sh` (no longer needed with standalone packaging)
+- [ ] Decide fate of `scripts/find_freecad.sh` (either integrate into CLI or keep as dev helper)
+- [x] Remove `watcher/` package-local directory (watching now handled via user project + CLI)
+
+## Watcher Migration (port from legacy `watcher/watch_specs.py`)
+- [ ] Recreate watcher as `bbcadam.watcher` (library) invoked by `bbcadam-launch`
+- [ ] Env-config: honor `BB_PROJECT_ROOT`, `BB_WATCH_DIR`, `BB_BUILD_DIR`
+- [ ] Directory scope:
+  - If `specs/` exists, watch `specs/parts` and `specs/assemblies`
+  - Else watch `BB_WATCH_DIR` (or project root)
+- [ ] File types: watch `.py`, `.yaml`, `.yml`; recursive
+- [ ] Debounce: coalesce rapid changes (≈250ms) before rebuild
+- [ ] Rebuild rules:
+  - Under `specs/parts/<part>/`: prefer `<part>.py`, else first `.py`
+  - Under `specs/assemblies/<asm>/`: prefer `<asm>.py`, else first `.py`
+  - Else (cwd mode): infer part vs assembly from parent folder name
+- [ ] Execute rebuilds headless via `FreeCADCmd` (CLI fallback if GUI absent)
+- [ ] (Later) GUI niceties: active doc + camera restore for assembly rebuilds
+- [ ] Tests: simulate file changes; assert calls to build functions; debounce works
+

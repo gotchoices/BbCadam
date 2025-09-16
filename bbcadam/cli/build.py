@@ -3,6 +3,7 @@
 bbcadam-build: Build CAD models using abbreviated format (kwave-style).
 """
 
+import os
 import sys
 import subprocess
 from pathlib import Path
@@ -78,26 +79,32 @@ def main():
         print("Error: FreeCADCmd not found. Please install FreeCAD or specify --freecad-cmd")
         sys.exit(1)
     
-    # Build command
-    cmd = [freecad_cmd]
-    
-    # Add project arguments
-    cmd.extend(["--project", str(project_root)])
-    cmd.extend(["--build-dir", str(build_dir)])
-    
-    # Add dump-json argument if provided
+    # Build command: execute an internal runner inside FreeCADCmd
+    # Inject repo root into sys.path so 'import bbcadam' works inside FreeCAD's Python
+    repo_root = Path(__file__).resolve().parents[2]
+    runner_code = (
+        f"import sys; sys.path.insert(0, {repr(str(repo_root))}); "
+        f"import bbcadam.cli._runner_build as r; r.main()"
+    )
+    cmd = [freecad_cmd, "-c", runner_code]
+
+    # Provide context via environment variables for runner to read
+    env = os.environ.copy()
+    env["BB_PROJECT_ROOT"] = str(project_root)
+    env["BB_BUILD_DIR"] = str(build_dir)
+    env["BB_SCRIPTS"] = os.pathsep.join(str(Path(s).resolve()) for s in args.scripts)
     if args.dump_json:
-        cmd.extend(["--dump-json", args.dump_json])
-    
-    # Add script files
-    cmd.extend(args.scripts)
+        env["BB_DUMP_JSON"] = str(args.dump_json)
+    # Keep PYTHONPATH addition as a backup
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (str(repo_root) if not existing else f"{repo_root}{os.pathsep}{existing}")
     
     print(f"Project root: {project_root}")
     print(f"Build output: {build_dir}")
     print(f"Building with FreeCADCmd: {' '.join(cmd)}")
     
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, env=env)
     except subprocess.CalledProcessError as e:
         print(f"Error building: {e}")
         sys.exit(1)

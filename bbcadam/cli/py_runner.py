@@ -3,6 +3,7 @@
 bbcadam-py: Execute full Python format CAD scripts.
 """
 
+import os
 import sys
 import subprocess
 from pathlib import Path
@@ -88,14 +89,25 @@ def main():
         sys.exit(1)
     
     # Build command to execute script with FreeCADCmd
-    cmd = [freecad_cmd, "--project", str(project_root), "--output-dir", str(output_dir), "-c", script_content]
+    repo_root = Path(__file__).resolve().parents[2]
+    injected = f"import sys; sys.path.insert(0, {repr(str(repo_root))});\n" + script_content
+    cmd = [freecad_cmd, "-c", injected]
+    
+    # Provide context via environment variables
+    env = os.environ.copy()
+    env["BB_PROJECT_ROOT"] = str(project_root)
+    env["BB_OUTPUT_DIR"] = str(output_dir)
+    # Ensure FreeCADCmd can import our package
+    repo_root = Path(__file__).resolve().parents[2]
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (str(repo_root) if not existing else f"{repo_root}{os.pathsep}{existing}")
     
     print(f"Project root: {project_root}")
     print(f"Output directory: {output_dir}")
     print(f"Executing script with FreeCADCmd: {script_path}")
     
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, env=env)
     except subprocess.CalledProcessError as e:
         print(f"Error executing script: {e}")
         sys.exit(1)

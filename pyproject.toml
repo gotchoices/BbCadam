@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bbcadam"
+dynamic = ["version"]
+description = "A FreeCAD-based scripting framework for parametric CAD design"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "BbCadam Contributors"}
+]
+maintainers = [
+    {name = "BbCadam Contributors"}
+]
+keywords = ["cad", "freecad", "parametric", "modeling", "3d", "manufacturing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.7"
+dependencies = [
+    # FreeCAD is user-provided, not packaged
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "pytest-mock",
+    "black",
+    "flake8",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[project.scripts]
+bbcadam-launch = "bbcadam.cli.launch:main"
+bbcadam-build = "bbcadam.cli.build:main"
+bbcadam-py = "bbcadam.cli.py_runner:main"
+bbcadam-dump = "bbcadam.cli.dump:main"
+
+[project.urls]
+Homepage = "https://github.com/gotchoices/bbcadam"
+Documentation = "https://github.com/gotchoices/bbcadam/blob/main/docs/"
+Repository = "https://github.com/gotchoices/bbcadam"
+"Bug Tracker" = "https://github.com/gotchoices/bbcadam/issues"
+
+[tool.setuptools]
+packages = ["bbcadam", "bbcadam.cli"]
+
+[tool.setuptools.package-data]
+bbcadam = ["*.md", "docs/*", "examples/*"]
+
+[tool.setuptools_scm]
+write_to = "bbcadam/_version.py"
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-v", "--tb=short"]
+markers = [
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow running",
+    "freecad: marks tests that require FreeCAD",
+]

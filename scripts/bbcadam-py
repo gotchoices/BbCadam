@@ -1,0 +1,41 @@
+#!/bin/bash
+# bbcadam-py: Shebang wrapper for executing CAD scripts with FreeCAD
+
+set -euo pipefail
+
+# Find FreeCADCmd
+FREECAD_CMD=""
+
+# Check common FreeCAD locations
+if [[ -f "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd" ]]; then
+    FREECAD_CMD="/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd"
+elif command -v FreeCADCmd >/dev/null 2>&1; then
+    FREECAD_CMD="FreeCADCmd"
+elif command -v freecadcmd >/dev/null 2>&1; then
+    FREECAD_CMD="freecadcmd"
+fi
+
+if [[ -z "$FREECAD_CMD" ]]; then
+    echo "Error: FreeCADCmd not found. Please install FreeCAD or add it to PATH." >&2
+    exit 1
+fi
+
+# Get the script path (first argument)
+if [[ $# -eq 0 ]]; then
+    echo "Usage: $0 <script.py>" >&2
+    exit 1
+fi
+
+SCRIPT_PATH="$1"
+
+# Read the script content
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+    echo "Error: Script not found: $SCRIPT_PATH" >&2
+    exit 1
+fi
+
+# Determine project root (directory containing the script)
+PROJECT_ROOT="$(dirname "$SCRIPT_PATH")"
+
+# Execute the script with FreeCADCmd
+exec "$FREECAD_CMD" --project "$PROJECT_ROOT" -c "$(cat "$SCRIPT_PATH")"

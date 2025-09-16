@@ -10,8 +10,10 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
 - Encourage stable modeling practices (datum/LCS, named references) to reduce topological breakage.
 
 ## What BbCadam provides
-- Part/assembly authoring contract and context (`ctx`) with document, params, units, paths, and logging.
-- A small fluent Python DSL:
+- **Two script formats**: Abbreviated format (kwave-style) and full Python format
+- **CLI tools**: `bbcadam-build`, `bbcadam-py`, `bbcadam-launch`, `bbcadam-dump`
+- **Part/assembly authoring** with context (`ctx`) including document, params, units, paths, and logging
+- **A small fluent Python DSL**:
   - `box(...)` / `cylinder(...)` → `Feature`
   - `Feature.translate(...).rotate(...).add()/cut()`
   - `lcs(name, at, rot_xyz_deg)` (alias `add_lcs`)
@@ -37,6 +39,32 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
 - Document units, coordinate frames, and conventions.
 - Optional (phase 2): dependency graph (parts→assemblies) for impacted rebuilds.
 
+## Script Formats
+
+### Abbreviated Format (kwave-style)
+```python
+def build_part(ctx):
+    # Parameters
+    radius = param('radius', 10)
+    
+    # Create part using DSL
+    box = box(radius, radius, radius)
+```
+
+**Usage**: `bbcadam-build mypart.py`
+
+### Full Python Format (standalone)
+```python
+#!/usr/bin/env bbcadam-py
+import bbcadam
+
+# Direct DSL usage
+box = bbcadam.box(10, 10, 10)
+bbcadam.export_stl(box, "output.stl")
+```
+
+**Usage**: `bbcadam-py myscript.py` or `./myscript.py`
+
 ## Usage (conceptual)
 Project structure in a dependent repo (e.g., `kwave/`):
 ```
@@ -53,12 +81,17 @@ Run the GUI watcher via launcher, or build headless with the wrappers:
 # GUI + watcher (auto-detects FreeCAD):
 bash BbCadam/tools/launch_freecad_with_watcher.sh --project kwave
 
-# Headless build (auto-detects FreeCADCmd):
-bash BbCadam/tools/build_headless.sh kwave/specs/parts/lagoon/lagoon.py
+# Abbreviated format (kwave-style):
+bbcadam-build kwave/specs/parts/lagoon/lagoon.py
+
+# Full Python format:
+bbcadam-py myscript.py
+
+# Interactive development:
+bbcadam-launch
 
 # Debug dump (JSON bbox/faces/edges/volume):
-bash BbCadam/tools/dump.sh kwave/specs/parts/lagoon/lagoon.py
-cat kwave/build/debug/lagoon.json
+bbcadam-dump kwave/specs/parts/lagoon/lagoon.py
 ```
 
 See `api.md` for the DSL and authoring guide, including arc input validation rules and the `sketch(visible=...)` flag.

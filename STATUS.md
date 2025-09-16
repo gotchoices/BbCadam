@@ -1,34 +1,85 @@
-# Implementation Checklist (current approach and next steps)
+# Implementation Checklist
 
+## Current Status: Core DSL Implementation
 - [x] Part-based Section DSL (formerly sketch): 2D ops (circle, rectangle, polygon, from_/to/go, arc, close); 3D ops (pad, revolve, sweep); holes; XY plane
 - [x] Plane support: XZ/YZ for section.pad/revolve; sweep respects path plane and auto-aligns profile normal
 - [x] Examples: mount_plate (rounded), piston (revolve), worm (sweep)
-
 - [x] API rename: sketch() → section()
-  - [x] Rename public API in code (BbCadam/api.py) and remove `sketch` symbol (kept as warning fallback)
-  - [x] Update builder injection (inject `section` instead of `sketch`)
-  - [x] Update examples (mount_plate.py, piston.py, worm.py) to call `section`
-  - [x] Update docs (`api.md` and README) to use `section`
-
 - [x] Section backend abstraction
-  - [x] Define SectionBackend interface (pad/revolve/sweep)
-  - [x] Implement PartSectionBackend (current behavior)
-  - [x] Wire Section to delegate pad/revolve/sweep to backend
-  - [ ] SketcherSectionBackend: scaffold (no impl yet)
-
 - [x] Generic Section API with materialization flag
-  - [x] Introduce `generic_section(materialized: bool, ...)` as the single entry point
-  - [x] Add wrappers: `section(...)` ⇒ materialized=False; `sketch(...)` ⇒ materialized=True (warns/falls back)
-  - [x] Route to the same internal geometry pipeline; select backend based on flag
 
+## Migration to Standalone Package
+
+### Phase 1: Package Structure & Setup
+- [ ] Create new package structure (bbcadam/ instead of BbCadam/)
+- [ ] Create setup.py with entry points for CLI tools
+- [ ] Create pyproject.toml for modern Python packaging
+- [ ] Add LICENSE file
+- [ ] Create bbcadam/__init__.py with proper package initialization
+- [ ] Move tools/ scripts to scripts/ directory
+- [ ] Create bbcadam/cli/ module for CLI entry points
+- [ ] Create bbcadam-py shebang wrapper script
+
+### Phase 2: Code Refactoring
+- [ ] Refactor api.py into modules:
+  - [ ] bbcadam/core/dsl_core.py (Feature, param, export)
+  - [ ] bbcadam/core/profiles.py (geometry classes: lines, arcs, circles; adapters)
+  - [ ] bbcadam/core/primitives.py (box, cylinder)
+  - [ ] bbcadam/core/assemblies.py (component helpers)
+  - [ ] bbcadam/backends/part.py (PartSectionBackend)
+  - [ ] bbcadam/backends/sketcher.py (SketcherSectionBackend)
+- [ ] Update all imports to use new module structure
+- [ ] Create bbcadam/__init__.py to re-export public API
+- [ ] Move watcher/ to bbcadam/watcher/
+- [ ] Update builder.py to use new module structure
+
+### Phase 3: CLI Integration
+- [ ] Implement bbcadam/cli/launch.py (bbcadam-launch command)
+- [ ] Implement bbcadam/cli/build.py (bbcadam-build command for abbreviated format)
+- [ ] Implement bbcadam/cli/py_runner.py (bbcadam-py command for full Python format)
+- [ ] Implement bbcadam/cli/dump.py (bbcadam-dump command)
+- [ ] Test CLI entry points work after pip install
+- [ ] Test both script formats work correctly
+
+### Phase 4: Examples & Documentation
+- [ ] Move kwave examples to bbcadam/examples/
+- [ ] Create docs/ directory with:
+  - [ ] docs/installation.md
+  - [ ] docs/api.md (updated)
+  - [ ] docs/examples.md
+- [ ] Update README.md for standalone package
+- [ ] Add docstrings to all public APIs
+- [ ] Create example CAD scripts using shebang wrapper
+
+### Phase 5: Testing & Distribution
+- [ ] Create tests/ directory with unit tests
+- [ ] Test installation via pip install -e .
+- [ ] Test CLI commands work after installation
+- [ ] Test shebang wrapper with example scripts
+- [ ] Create GitHub Actions for CI/CD
+- [ ] Test cross-platform compatibility (macOS, Linux, Windows)
+
+### Phase 6: Publishing Preparation
+- [ ] Add version management (__version__ in __init__.py)
+- [ ] Create CHANGELOG.md
+- [ ] Test PyPI upload (test.pypi.org first)
+- [ ] Create GitHub releases
+- [ ] Update documentation for published package
+
+## Remaining Core Features (can be done in parallel)
 - [ ] Internal geometry representation (backend‑agnostic)
-  - [x] Created `_SectionProfile` and moved 2D ops behind a profile layer
   - [ ] Refactor `_SectionProfile` to store pure geometry (lines/arcs/circles as numbers), not Part edges
-  - [ ] Add adapters:
-    - [ ] PartProfileAdapter → builds Part wires/faces from geometry
-    - [ ] SketcherProfileAdapter → creates Sketcher::SketchObject geometry
+  - [ ] Add adapters: PartProfileAdapter, SketcherProfileAdapter
   - [ ] Update PartSectionBackend to use PartProfileAdapter
   - [ ] Implement SketcherSectionBackend using SketcherProfileAdapter (materialized=True)
+
+- [ ] 3D Section Enhancement (post-testing)
+  - [ ] Rename `section` to `profile` (more generic name)
+  - [ ] Add 3D path creation directives: `profile.line3d()`, `profile.arc3d()`, `profile.helix3d()`
+  - [ ] Extend sweep to work with 3D paths: `profile.sweep3d(path_profile)`
+  - [ ] Add 3D coordinate support: `profile.to3d(x, y, z)`, `profile.arc3d(center, radius, start, end)`
+  - [ ] Maintain backward compatibility with 2D operations
+  - [ ] Document 3D vs 2D usage patterns
 
 - [ ] LCS/Datum plane targeting
   - [x] Accept plane strings `LCS:Name`/`Datum:Name` (and object references)
@@ -46,22 +97,7 @@
   - [ ] Add simple selectors: `outside_all`, `top_edges`, `bottom_edges`, `vertical_edges`
   - [ ] Implement for box/cylinder results (axis-aligned), document limitations
 
-- [ ] Refactor api.py into modules (no behavior change)
-  - [ ] `dsl_core.py` (Feature, param, export)
-  - [ ] `profiles.py` (geometry classes: lines, arcs, circles; adapters)
-  - [ ] `section_backends/part.py` and `section_backends/sketcher.py`
-  - [ ] `primitives.py` (box, cylinder)
-  - [ ] `assemblies.py` (component helpers)
-  - [ ] `exports.py`
-  - [ ] Re-export in `BbCadam/__init__.py`
-
-- [ ] Documentation
-  - [x] Update `api.md` for rename: section and add `sketch(visible=...)`
-  - [ ] Add examples for section.pad (holes), section.revolve (piston), section.sweep (worm)
-  - [ ] Document LCS planes and sweep orientation options
-  - [x] Document arc validation (dir/radius, circle membership, degenerate/full-circle)
-
-## Known issues / Open items
+## Known Issues
 - [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:
   - Avoiding opening part documents during assembly linking (load shapes directly without activating docs), or
   - Using App::Link with document path without opening the target document, or
@@ -69,10 +105,7 @@
 - [x] LCS duplication on part rebuilds fixed: `lcs()` now reuses existing objects by name.
 - [x] Sketch duplication fixed: Sketcher materialization reuses an existing sketch by name and clears geometry.
 
-Assessment of current design vs planned generic API
-- We have the backend layer (PartSectionBackend) and a profile layer, but `_SectionProfile` still emits Part geometry; this couples us to Part and is not fully backend‑agnostic.
-- Plan: convert `_SectionProfile` to pure numeric geometry and introduce adapters for Part/Sketcher. Add `generic_section(materialized)` with `section()/sketch()` wrappers.
-
-Current task: None blocking for section tests. Next focus: complete backend‑agnostic geometry (circles/arc fidelity) and add SketcherProfileAdapter.
+## Current Priority
+**Phase 1: Package Structure & Setup** - Create the foundation for a standalone package while maintaining current functionality.
 
 

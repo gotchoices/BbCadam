@@ -96,6 +96,27 @@ Expected:
 
 Note: This is a manual validation step and not part of `pytest`.
 
+### DSL Test Patterns (abbreviated vs full-python)
+
+- Abbreviated scripts (build_part(ctx)) executed via `bbcadam-build` get the DSL injected into the script module, so you can call `box(...)`, `cylinder(...)`, `sketch(...)` without imports. Keep `build_part(ctx)` assertion-free and focused on building. Export JSON to a file (or let the harness append export) and assert in the test.
+
+- Full-Python scripts executed via `bbcadam-py` should `import bbcadam` and call `bbcadam.box(...)` etc. Prefer file-based JSON for assertions.
+
+Recommended helpers (in `conftest.py`):
+- `run_abbrev_script_and_load_json(source_py, work_dir)` — write a minimal abbreviated script string, run `bbcadam-build`, return parsed JSON.
+- `run_build_part_callable(build_part_fn, work_dir)` — introspect a `build_part(ctx)` function (no assertions), write it to a temp file, run `bbcadam-build`, and return parsed JSON. This keeps builders pure and pushes assertions into the pytest function.
+
+Example (callable pattern):
+```python
+from pathlib import Path
+from tests.dsl_cylinder2 import build_part  # defines build_part(ctx)
+from .conftest import run_build_part_callable
+
+def test_cylinder(tmp_path: Path):
+    data = run_build_part_callable(build_part, tmp_path)
+    assert data["counts"]["faces"] == 3
+```
+
 #### Test Configuration
 - **`conftest.py`** - pytest configuration and fixtures
 - **`pytest.ini`** - pytest settings and markers

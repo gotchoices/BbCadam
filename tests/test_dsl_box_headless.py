@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.freecad
 def test_box_export_json_headless(tmp_path: Path):
     # Create a temporary full-python script that prints exported JSON
     script = tmp_path / "make_box.py"
@@ -39,5 +38,11 @@ def test_box_export_json_headless(tmp_path: Path):
     # Basic sanity checks
     assert abs(data.get("volume", 0) - 6000) < 1e-6  # 10*20*30
     assert data.get("counts", {}).get("faces") == 6
+    assert data.get("counts", {}).get("edges") == 12
+    assert data.get("counts", {}).get("vertices") == 8
+    assert data.get("bbox") == [0.0, 0.0, 0.0, 10.0, 20.0, 30.0]
+    com = data.get("center_of_mass", [])
+    assert len(com) == 3 and all(abs(a - b) < 1e-6 for a, b in zip(com, [5.0, 10.0, 15.0]))
+    assert abs(data.get("area", 0) - 2200.0) < 1e-6
 
 

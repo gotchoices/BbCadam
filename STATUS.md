@@ -111,10 +111,10 @@
 
 ## Obsolete Files Cleanup (as replacements are validated)
 - [x] Remove `scripts/launch_freecad_with_watcher.sh` (replaced by `bbcadam-launch`)
-- [ ] Remove `scripts/build_headless.sh` (superseded by `bbcadam-build`)
-- [ ] Remove `scripts/build_headless.py` (logic migrated into `bbcadam/cli/build.py`)
-- [ ] Remove `scripts/dump.sh` (superseded by `bbcadam-dump`)
-- [ ] Remove `scripts/install_generated_py.sh` (no longer needed with standalone packaging)
+- [x] Remove `scripts/build_headless.sh` (superseded by `bbcadam-build`)
+- [x] Remove `scripts/build_headless.py` (logic migrated into `bbcadam/cli/build.py`)
+- [x] Remove `scripts/dump.sh` (superseded by `bbcadam-dump`)
+- [x] Remove `scripts/install_generated_py.sh` (no longer needed with standalone packaging)
 - [ ] Decide fate of `scripts/find_freecad.sh` (either integrate into CLI or keep as dev helper)
 - [x] Remove `watcher/` package-local directory (watching now handled via user project + CLI)
 

@@ -350,16 +350,27 @@ def _resolve_export_kinds(kinds):
     return kinds or ['step', 'stl']
 
 
-def export(kinds=None, name=None):
+def export(kinds=None, name=None, to=None):
+    """Export the current part in one or more formats.
+
+    kinds: str or list[str] among {'step','stl','json','brep'}
+    name: optional part name override for file outputs
+    to: for 'json' and 'brep' only: '-' to stdout or Path to file
+    """
     kinds_list = _resolve_export_kinds(kinds)
     obj = _finish_build(name or _CTX.part_name)
     if not obj:
         return
-    # Export using Import/Mesh
+    # File-based formats
     if 'step' in kinds_list:
         _export_step(obj, _CTX.paths.step_parts / f"{_CTX.part_name}.step")
     if 'stl' in kinds_list:
         _export_stl(obj, _CTX.paths.stl_parts / f"{_CTX.part_name}.stl")
+    # Stream/file formats for tests/inspection
+    if 'json' in kinds_list:
+        _export_json(obj, to)
+    if 'brep' in kinds_list:
+        _export_brep(obj, to)
 
 
 def export_step(part_name: str):
@@ -389,6 +400,93 @@ def _export_stl(obj, out_path: Path):
         Mesh.export([obj], str(out_path))
     except Exception:
         App.Console.PrintError(f"[bbcadam] STL export failed: {out_path}\n")
+
+
+def _shape_summary(shape):
+    """Create a compact, deterministic JSON-serializable summary for tests."""
+    bb = shape.BoundBox
+    try:
+        com = shape.CenterOfMass
+        com_list = [float(com.x), float(com.y), float(com.z)]
+    except Exception:
+        com_list = [0.0, 0.0, 0.0]
+    face_count = len(getattr(shape, 'Faces', []) or [])
+    edge_count = len(getattr(shape, 'Edges', []) or [])
+    vert_count = len(getattr(shape, 'Vertexes', []) or [])
+    try:
+        vol = float(shape.Volume)
+    except Exception:
+        vol = 0.0
+    try:
+        area = float(shape.Area)
+    except Exception:
+        area = 0.0
+    try:
+        shash = int(shape.hashCode(1e-6))
+    except Exception:
+        shash = 0
+    return {
+        'shape_hash': shash,
+        'bbox': [float(bb.XMin), float(bb.YMin), float(bb.ZMin), float(bb.XMax), float(bb.YMax), float(bb.ZMax)],
+        'volume': vol,
+        'area': area,
+        'center_of_mass': com_list,
+        'counts': {'faces': face_count, 'edges': edge_count, 'vertices': vert_count},
+        'version': 1,
+    }
+
+
+def _export_json(obj, to):
+    shape = obj.Shape
+    data = _shape_summary(shape)
+    s = json.dumps(data, separators=(',', ':'), sort_keys=True)
+    if to == '-' or (to is None and to == '-'):
+        # Print to stdout for headless tests
+        print(s)
+        return
+    if to:
+        out_path = Path(to)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(s)
+        return
+    # Default: write alongside build outputs
+    out_path = _CTX.paths.parts / f"{_CTX.part_name}.json"
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(s)
+    except Exception:
+        App.Console.PrintWarning(f"[bbcadam] JSON export failed: {out_path}\n")
+
+
+def _export_brep(obj, to):
+    shape = obj.Shape
+    # If stdout requested, write to temp then print
+    if to == '-':
+        try:
+            import tempfile
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td) / 'shape.brep'
+                shape.exportBrep(str(tmp))
+                print(tmp.read_text())
+            return
+        except Exception as e:
+            App.Console.PrintError(f"[bbcadam] BREP export to stdout failed: {e}\n")
+            return
+    if to:
+        out_path = Path(to)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shape.exportBrep(str(out_path))
+        except Exception as e:
+            App.Console.PrintError(f"[bbcadam] BREP export failed: {e}\n")
+        return
+    # Default location inside build parts folder
+    out_path = _CTX.paths.parts / f"{_CTX.part_name}.brep"
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        shape.exportBrep(str(out_path))
+    except Exception as e:
+        App.Console.PrintError(f"[bbcadam] BREP export failed: {e}\n")
 
 
 # --- Section backends (abstraction for Part/Sketcher implementations) ---

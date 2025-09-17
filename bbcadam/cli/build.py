@@ -104,7 +104,11 @@ def main():
     print(f"Building with FreeCADCmd: {' '.join(cmd)}")
     
     try:
-        subprocess.run(cmd, check=True, env=env)
+        proc = subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+        if proc.stdout:
+            print(proc.stdout, end="")
+        if proc.stderr:
+            print(proc.stderr, end="")
     except subprocess.CalledProcessError as e:
         print(f"Error building: {e}")
         sys.exit(1)

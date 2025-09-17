@@ -48,6 +48,13 @@ def main() -> None:
             else:
                 print(f"[bbcadam] Running build_part_script: {script}")
                 build_part_script(project_root, script)
+            # If tests requested JSON to stdout via env, emit it now
+            if os.environ.get("BB_DUMP_JSON_STDOUT") == "1":
+                try:
+                    from bbcadam import export
+                    export('json', to='-')
+                except Exception:
+                    pass
         except Exception as exc:
             status = 1
             import traceback

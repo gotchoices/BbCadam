@@ -115,7 +115,7 @@
 - [x] Remove `scripts/build_headless.py` (logic migrated into `bbcadam/cli/build.py`)
 - [x] Remove `scripts/dump.sh` (superseded by `bbcadam-dump`)
 - [x] Remove `scripts/install_generated_py.sh` (no longer needed with standalone packaging)
-- [ ] Decide fate of `scripts/find_freecad.sh` (either integrate into CLI or keep as dev helper)
+- [x] Remove `scripts/find_freecad.sh` (logic incorporated into CLI detection)
 - [x] Remove `watcher/` package-local directory (watching now handled via user project + CLI)
 
 ## Watcher Migration (port from legacy `watcher/watch_specs.py`)

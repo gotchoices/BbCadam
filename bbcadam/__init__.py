@@ -21,7 +21,7 @@ try:
         sketch,
         
         # Assembly functions
-        component,
+        # component,  # temporarily disabled until assembly API is restored
         
         # Utility functions
         lcs,
@@ -39,7 +39,7 @@ try:
         "feature",
         "section",
         "sketch",
-        "component",
+        # "component",
         "lcs",
         "add_lcs",
         "param",

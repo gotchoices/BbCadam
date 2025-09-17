@@ -70,6 +70,32 @@ pytest tests/test_dsl.py::test_box_creation
 pytest -m integration
 ```
 
+### Manual Watch/Build Validation (not automated)
+
+Use this to verify the in-GUI watcher and rebuild flow manually:
+
+```bash
+source test_env/bin/activate
+bbcadam-launch --watch-verbose  # opens FreeCAD and starts watcher
+
+# In another terminal, create or edit a sample part under the watch root
+cat > /tmp/sample_part.py <<'PY'
+def build_part(ctx):
+    from bbcadam import box
+    _ = box(10, 20, 30)
+PY
+
+# Copy into your specs tree and touch to trigger
+cp /tmp/sample_part.py ./specs/parts/sample/sample_part.py
+touch ./specs/parts/sample/sample_part.py
+```
+
+Expected:
+- In FreeCAD’s Report view: file system event or dir change detected
+- Rebuild message, and a new part document created/updated in the GUI
+
+Note: This is a manual validation step and not part of `pytest`.
+
 #### Test Configuration
 - **`conftest.py`** - pytest configuration and fixtures
 - **`pytest.ini`** - pytest settings and markers

@@ -83,11 +83,20 @@ class _GuiWatcher:
         self.mtimes: dict[str, float] = {}
         self._last_counts: tuple[int, int] = (-1, -1)
 
-        # Periodic poll to catch metadata-only changes (e.g., touch)
-        self.scan_timer = QTimer()
-        self.scan_timer.setInterval(750)
-        self.scan_timer.timeout.connect(self._poll)
-        self.scan_timer.start()
+        # Optional periodic poll to catch metadata-only changes (e.g., touch)
+        # Disabled by default; enable by setting BB_WATCH_POLL_MS
+        self.poll_ms = 0
+        try:
+            self.poll_ms = int(os.environ.get("BB_WATCH_POLL_MS", "0") or "0")
+        except Exception:
+            self.poll_ms = 0
+        if self.poll_ms > 0:
+            self.scan_timer = QTimer()
+            self.scan_timer.setInterval(self.poll_ms)
+            self.scan_timer.timeout.connect(self._poll)
+            self.scan_timer.start()
+            if self.verbose:
+                App.Console.PrintMessage(f"[bbcadam] polling enabled: {self.poll_ms} ms\n")
 
         self._attach()
         App.Console.PrintMessage(f"[bbcadam] Watch root: {self.watch_dir}\n")

@@ -63,7 +63,7 @@ Section.polygon(n=6, side=None, d=None, at=(x,y))
 Section.from_(x=None, y=None)
 Section.to(x=None, y=None)
 Section.go(dx=None, dy=None, r=None, a_deg=None)
-Section.arc(radius, dir='ccw', end=(dx,dy)|endAt=(x,y), center=(dx,dy)|centerAt=(x,y))
+Section.arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)
 Section.close()
 
 # 3D ops (return Feature)
@@ -185,11 +185,21 @@ Existing helpers `export_step(name)` and `export_stl(name)` may remain for expli
 
 Default: Part-based for performance and simplicity; use `sketch(...)` (instead of `section(...)`) to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). You can control visibility via `sketch(..., visible=True|False)`. Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
 
-### Arc input validation
-- dir must be `'ccw'` or `'cw'`; radius must be > 0
-- Start and end must lie on the circle defined by `center` and `radius` (combined absolute/relative tolerance ~1e-4)
-- Degenerate sweeps (near zero) are rejected
-- Full-circle via `arc()` is rejected; use `circle()` for closed circles
+### Arc specification and validation
+- Signature: `arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)`
+- Supported minimal combos (S=start, C=center, E=end, R=radius, θ=sweep, D=dir, T=tangent):
+  - C + E [+R optional] → R inferred from |CS| (must match |CE|); θ from geometry and D (minor by default)
+  - C + θ [+R optional] → E inferred (R from |CS| if not given)
+  - C + R + θ → E inferred
+  - R + E + D → C inferred (two solutions; D picks side); θ defaults to minor unless provided
+  - R + E + θ → C inferred; sign(θ) encodes direction
+  - R + θ + T → C and E inferred using start tangency; sign(θ) or D picks side
+- Underconstrained examples: C+R only; R+E only (needs D or θ or T); singletons (R or E or θ) are invalid.
+- Validation:
+  - dir must be `'ccw'` or `'cw'` if used; radius > 0
+  - Start/end must lie at distance R from C (tolerance ~1e-4) when provided
+  - Degenerate sweeps rejected; full-circle via `arc()` rejected (use `circle()`)
+  - Coordinates respect section plane mapping (XY/XZ/YZ)
 
 ### Sweep orientation behavior
 - By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.

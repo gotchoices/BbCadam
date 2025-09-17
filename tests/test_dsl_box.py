@@ -22,7 +22,12 @@ def main() -> None:
     assert abs(data["volume"] - 6000.0) < 1e-6
 
 
+def test_box():
+    main()
+
+
 if __name__ == "__main__":
     main()
+
 
 

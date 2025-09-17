@@ -20,7 +20,12 @@ def main() -> None:
     assert bb[2] == 0.0 and bb[5] == 20.0
 
 
+def test_cylinder():
+    main()
+
+
 if __name__ == "__main__":
     main()
+
 
 

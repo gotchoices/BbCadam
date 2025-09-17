@@ -52,7 +52,11 @@
 - [ ] Create example CAD scripts using shebang wrapper
 
 ### Phase 5: Testing & Distribution
-- [ ] Create tests/ directory with unit tests
+- [x] Create tests/ directory with unit/integration tests
+- [x] Add headless DSL regression tests (box, cylinder) via `bbcadam-build`
+- [x] Add helpers for abbreviated tests (`run_abbrev_script_and_load_json`, `run_build_part_callable`)
+- [ ] Add sketch → pad regression tests (lines/arcs, close, pad)
+- [ ] Add assembly smoke test (component/link minimal)
 - [ ] Test installation via pip install -e .
 - [ ] Test CLI commands work after installation
 - [ ] Test shebang wrapper with example scripts
@@ -80,6 +84,7 @@
   - [ ] Add 3D coordinate support: `profile.to3d(x, y, z)`, `profile.arc3d(center, radius, start, end)`
   - [ ] Maintain backward compatibility with 2D operations
   - [ ] Document 3D vs 2D usage patterns
+  - [ ] Create profile regression tests (3D path + sweep) before/after migration
 
 - [ ] LCS/Datum plane targeting
   - [x] Accept plane strings `LCS:Name`/`Datum:Name` (and object references)
@@ -107,6 +112,42 @@
 
 ## Current Priority
 **Phase 1: Package Structure & Setup** - Create the foundation for a standalone package while maintaining current functionality.
+
+## DSL Refactor & Regression Strategy
+- [x] Establish initial DSL regression tests (box, cylinder JSON export; headless)
+- [ ] Add sketch-based tests (line/arc/close → pad) to lock behavior
+- [ ] Refactor `api.py` into `bbcadam/core/*` and `bbcadam/backends/*` per Phase 2
+- [ ] Re-run DSL regression tests and fix any breakages (no functional regressions)
+- [ ] Migrate `section` → `profile` after tests are green; add profile tests
+
+### DSL Regression Test Checklist (excluding `section`/`profile`)
+- [x] box: create 10×20×30, assert volume=6000, bbox, face/edge/vertex counts
+- [x] box transforms: `.at()` assert bbox shift (2×3×4 at (1,2,3) → [1,2,3,3,5,7])
+- [ ] cylinder (d,h): d=10,h=20, assert volume≈π·5²·20, faces=3, bbox z-span
+- [x] cylinder (r,h): r=5,h=20 variant, same assertions
+- [ ] Feature.add: fuse two boxes, assert volume=sum and counts plausible
+  - [x] Non-overlapping boxes fuse: volume 24+1=25
+- [ ] Feature.cut: box minus cylinder, assert volume reduction and counts change
+  - [x] Box cut inner box: 4×4×4 − 2×2×2@center → volume 56
+- [ ] feature() composer: `.box().cylinder().add()` then `.cut()` path, assert final volume
+- [ ] lcs/add_lcs: create named datum; assert document contains object with correct Placement
+- [ ] param(): numeric param from params.yaml; default value; string numeric; expression (=a+b) — sizes drive box volume as expected
+- [ ] export('json'): file output exists and parses; fields present (bbox, counts, volume)
+- [ ] export('step'): file written to exports/step/parts with correct name
+- [ ] export('stl'): file written to exports/stl/parts with correct name
+- [ ] export multiple kinds in one call: ['json','step'] — both artifacts created
+- [ ] appearance/color/opacity: call chain `.color((1,0,0)).opacity(50)`; assert no error headless (GUI-only properties guarded)
+- [ ] generic error handling: invalid cylinder args (no r/d) raises ValueError
+
+#### Sketcher arcs → pad (to be added)
+- [ ] Semicircle pad: `from_(R,0) → arc(radius=R, dir='ccw', centerAt=(0,0), endAt=(-R,0)) → to(R,0) → close() → pad(h)`; assert volume=0.5·π·R²·h
+- [ ] Relative center/end variant: same semicircle using `center=(−R,0)`, `end=(−2R,0)`
+- [ ] Mixed addressing: `centerAt=(cx,cy)` with `end=(dx,dy)`; and `center=(dx,dy)` with `endAt=(ex,ey)`
+- [ ] Direction: repeat one case with `dir='cw'` (volume unchanged)
+- [ ] Rounded rectangle corner: rectangle with one corner replaced by `arc(radius=R, ...)`; assert volume = (rect area − quarter circle area)·h
+- [ ] Multi-arc chain: two arcs joined by a line; `close()` then `pad(h)`; assert non-zero volume and sane bbox
+- [ ] Plane variants: run one arc case on `plane='XZ'` and `plane='YZ'` to verify mapping
+- [ ] Sketcher materialization: with `sketch(..., visible=True)` ensure a `Sketcher::SketchObject` exists before `pad()`
 
 
 ## Obsolete Files Cleanup (as replacements are validated)

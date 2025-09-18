@@ -1,5 +1,6 @@
 import ast
 import json
+import os
 from pathlib import Path
 
 import FreeCAD as App
@@ -17,6 +18,53 @@ _STATE = {
 def _set_ctx(ctx):
     global _CTX
     _CTX = ctx
+
+
+# --- Lightweight logging facility (opt-in, tag-based, file append) ---
+_LOG_ENABLED = os.environ.get('BB_LOG_ENABLE') == '1'
+_LOG_TAGS = set(t.strip() for t in os.environ.get('BB_LOG_TAGS', '').split(',') if t.strip())
+_LOG_FILE = os.environ.get('BB_LOG_FILE') or ''
+
+
+def _log_is_enabled(tag: str) -> bool:
+    if not _LOG_ENABLED:
+        return False
+    if not _LOG_TAGS or '*' in _LOG_TAGS:
+        return True
+    return tag in _LOG_TAGS
+
+
+def log(tag: str, message: str) -> None:
+    """Append a log line when enabled.
+
+    Control via env vars:
+    - BB_LOG_ENABLE=1 to enable logging
+    - BB_LOG_TAGS=arc,sketch,* to control which tags emit
+    - BB_LOG_FILE=/path/to/file.log to write to a file (created if needed)
+      If not set, falls back to App.Console or print().
+    """
+    if not _log_is_enabled(tag):
+        return
+    line = f"[{tag}] {message}"
+    if _LOG_FILE:
+        try:
+            p = Path(_LOG_FILE)
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            with p.open('a', encoding='utf-8') as fh:
+                fh.write(line + "\n")
+            return
+        except Exception:
+            pass
+    try:
+        App.Console.PrintMessage(line + "\n")
+    except Exception:
+        try:
+            print(line)
+        except Exception:
+            pass
 
 
 def _ensure_part_module():
@@ -410,8 +458,33 @@ def _shape_summary(shape):
         com_list = [float(com.x), float(com.y), float(com.z)]
     except Exception:
         com_list = [0.0, 0.0, 0.0]
-    face_count = len(getattr(shape, 'Faces', []) or [])
-    edge_count = len(getattr(shape, 'Edges', []) or [])
+    faces = getattr(shape, 'Faces', []) or []
+    edges = getattr(shape, 'Edges', []) or []
+    face_count = len(faces)
+    edge_count = len(edges)
+    # Edge kind counts (basic): circle-like vs line vs other
+    circle_edges = 0
+    line_edges = 0
+    other_edges = 0
+    circle_edge_lengths = []
+    try:
+        for e in edges:
+            try:
+                cname = getattr(getattr(e, 'Curve', None), '__class__', type(None)).__name__
+            except Exception:
+                cname = None
+            if cname in ('Circle', 'ArcOfCircle'):
+                circle_edges += 1
+                try:
+                    circle_edge_lengths.append(float(e.Length))
+                except Exception:
+                    pass
+            elif cname in ('Line', 'LineSegment'):
+                line_edges += 1
+            else:
+                other_edges += 1
+    except Exception:
+        pass
     vert_count = len(getattr(shape, 'Vertexes', []) or [])
     try:
         vol = float(shape.Volume)
@@ -431,7 +504,15 @@ def _shape_summary(shape):
         'volume': vol,
         'area': area,
         'center_of_mass': com_list,
-        'counts': {'faces': face_count, 'edges': edge_count, 'vertices': vert_count},
+        'counts': {
+            'faces': face_count,
+            'edges': edge_count,
+            'vertices': vert_count,
+            'edge_kinds': {'circle': circle_edges, 'line': line_edges, 'other': other_edges},
+        },
+        'edge_metrics': {
+            'circle_lengths': circle_edge_lengths,
+        },
         'version': 1,
     }
 
@@ -504,7 +585,8 @@ class SectionBackend:
 
 class PartSectionBackend(SectionBackend):
     def _build_face_with_holes(self, section):
-        return PartProfileAdapter(section._profile).build_face_with_holes()
+        # Prefer profile's own wire-first strategy to preserve exact arcs from _poly_edges
+        return section._profile.build_face_with_holes()
 
     def pad(self, section, dist, dir='+'):
         face = self._build_face_with_holes(section)
@@ -822,8 +904,31 @@ class Section:
         if E is None:
             raise ValueError('arc inference failed to determine end point')
 
-        # Always submit absolute center/end via centerAt/endAt for robustness
-        self._profile.arc(radius=R, dir=dir, center=None, centerAt=(float(C[0]), float(C[1])), end=None, endAt=(float(E[0]), float(E[1])))
+        # Compute sweep if not provided for center+end case
+        if sweep is None and C is not None and E is not None:
+            import math
+            a0 = math.atan2(sy - C[1], sx - C[0])
+            a1 = math.atan2(E[1] - C[1], E[0] - C[0])
+            def norm(a):
+                while a < 0:
+                    a += 2 * math.pi
+                while a >= 2 * math.pi:
+                    a -= 2 * math.pi
+                return a
+            a0 = norm(a0)
+            a1 = norm(a1)
+            if str(dir).lower() == 'ccw':
+                delta = a1 - a0
+                if delta < 0:
+                    delta += 2 * math.pi
+            else:
+                delta = a1 - a0
+                if delta > 0:
+                    delta -= 2 * math.pi
+            sweep = math.degrees(delta)
+
+        # Always submit absolute center/end via centerAt/endAt and pass sweep when known
+        self._profile.arc(radius=R, dir=dir, center=None, centerAt=(float(C[0]), float(C[1])), end=None, endAt=(float(E[0]), float(E[1])), sweep=sweep)
         return self
 
     def close(self):
@@ -978,6 +1083,8 @@ class _SectionProfile:
         self._building_hole = bool(hole)
         # start new geom path
         self._geom_current = []
+        # record starting point so first op can be an arc
+        self._geom_current.append(('move', (float(x), float(y))))
 
     def to(self, x=None, y=None):
         if self._cursor is None:
@@ -1005,9 +1112,12 @@ class _SectionProfile:
             self._geom_current.append(('line', (float(px), float(py), float(nx), float(ny))))
         self._cursor = (nx, ny)
 
-    def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None):
+    def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None, sweep=None):
         import math
         import Part
+        _DBG = os.environ.get('BB_DEBUG_ARC') == '1' or _log_is_enabled('arc')
+        if _DBG:
+            log('arc', "_profile.arc start")
         if self._cursor is None:
             raise RuntimeError('arc() called before from_()')
         dir_l = str(dir).lower()
@@ -1059,24 +1169,37 @@ class _SectionProfile:
             return a
         a_start = norm(a_start)
         a_end = norm(a_end)
-        if dir_l == 'ccw':
-            delta = a_end - a_start
-            if delta < 0:
-                delta += 2 * math.pi
+        if _DBG:
+            log('arc', f"params S=({sx:.6f},{sy:.6f}) C=({cx:.6f},{cy:.6f}) E=({ex:.6f},{ey:.6f}) R={R:.6f} dir={dir_l} sweep_in={sweep}")
+        # Compute desired sweep
+        if sweep is None:
+            if dir_l == 'ccw':
+                delta = a_end - a_start
+                if delta < 0:
+                    delta += 2 * math.pi
+            else:
+                delta = a_end - a_start
+                if delta > 0:
+                    delta -= 2 * math.pi
+            # Handle diametric (antipodal) case explicitly → |delta| = pi
+            diff = abs(a_end - a_start)
+            diff = min(diff, 2 * math.pi - diff)
+            if abs(diff - math.pi) < 1e-8:
+                delta = math.pi if dir_l == 'ccw' else -math.pi
         else:
-            delta = a_end - a_start
-            if delta > 0:
-                delta -= 2 * math.pi
-        # Reject degenerate sweeps
+            # Use explicitly provided sweep (degrees)
+            delta = math.radians(float(sweep))
+        # Reject degenerate or full circle
         tol_ang = 1e-6
-        sweep_abs = abs(delta)
-        if sweep_abs < tol_ang:
+        if abs(delta) < tol_ang:
             raise ValueError('arc sweep too small (degenerate); adjust end or direction')
-        if abs(sweep_abs - 2 * math.pi) < tol_ang:
+        if abs(abs(delta) - 2 * math.pi) < tol_ang:
             raise ValueError("full-circle arc not supported via arc(); use circle() instead")
         a_mid = a_start + delta / 2.0
         smid_x = cx + R * math.cos(a_mid)
         smid_y = cy + R * math.sin(a_mid)
+        if _DBG:
+            log('arc', f"delta={delta:.6f} mid=({smid_x:.6f},{smid_y:.6f})")
         start_v = App.Vector(sx, sy, 0)
         mid_v = App.Vector(smid_x, smid_y, 0)
         end_v = App.Vector(ex, ey, 0)
@@ -1084,15 +1207,29 @@ class _SectionProfile:
         if not hasattr(self, '_poly_edges'):
             self._poly_edges = []
         self._poly_edges.append(edge)
+        if _DBG:
+            try:
+                log('arc', f"edge_length={float(edge.Length):.6f}")
+            except Exception:
+                pass
         self._cursor = (ex, ey)
         if self._geom_current is not None:
-            self._geom_current.append(('arc', dict(radius=float(radius), dir=dir, center=(float(cx), float(cy)), end=(float(ex), float(ey)))))
+            self._geom_current.append(('arc', dict(radius=float(radius), dir=dir, center=(float(cx), float(cy)), end=(float(ex), float(ey)), sweep_rad=float(delta), start=(float(sx), float(sy)))))
 
     def close(self):
         import Part
         if self._cursor is None or self._first_point is None:
             return
-        if self._cursor != self._first_point:
+        # Close with tolerance to avoid micro-gaps
+        tol_close = 1e-6
+        need_close = True
+        try:
+            dx = float(self._cursor[0]) - float(self._first_point[0])
+            dy = float(self._cursor[1]) - float(self._first_point[1])
+            need_close = (dx*dx + dy*dy) > tol_close*tol_close
+        except Exception:
+            need_close = self._cursor != self._first_point
+        if need_close:
             # Add closing edge to physical edges
             self._append_segment(self._cursor, self._first_point)
             # Also record closing edge in geometry path for adapters/show()
@@ -1229,7 +1366,13 @@ class PartProfileAdapter:
                     sx = float(edges[-1].Vertexes[-1].Point.x)
                     sy = float(edges[-1].Vertexes[-1].Point.y)
                 else:
-                    continue
+                    # Use recorded start point from profile if no prior edge exists
+                    try:
+                        sx = float(self.p._first_point[0])
+                        sy = float(self.p._first_point[1])
+                    except Exception:
+                        # As a last resort, skip arc if start unknown
+                        continue
                 R = float(data['radius'])
                 import math
                 # angles from center to start/end (note atan2(y,x))
@@ -1254,6 +1397,11 @@ class PartProfileAdapter:
                     delta = a_end - a_start
                     if delta > 0:
                         delta -= 2 * math.pi
+                # Handle diametric case explicitly
+                diff = abs(a_end - a_start)
+                diff = min(diff, 2 * math.pi - diff)
+                if abs(diff - math.pi) < 1e-8:
+                    delta = math.pi if direction == 'ccw' else -math.pi
                 a_mid = a_start + delta / 2.0
                 mid = App.Vector(cx + R * math.cos(a_mid), cy + R * math.sin(a_mid), 0)
                 edges.append(Part.Arc(App.Vector(sx, sy, 0), mid, App.Vector(ex, ey, 0)).toShape())
@@ -1312,6 +1460,9 @@ class SketcherProfileAdapter:
             import Part, math
             last = None
             for op in ops:
+                if op[0] == 'move':
+                    last = (float(op[1][0]), float(op[1][1]))
+                    continue
                 if op[0] == 'line':
                     x1, y1, x2, y2 = op[1]
                     seg = Part.LineSegment(App.Vector(x1, y1, 0), App.Vector(x2, y2, 0))
@@ -1321,32 +1472,39 @@ class SketcherProfileAdapter:
                     data = op[1]
                     cx, cy = data['center']
                     ex, ey = data['end']
-                    if last is None:
+                    sx, sy = data.get('start', last) if last is not None else data.get('start', None)
+                    if sx is None:
                         continue
-                    sx, sy = last
-                    # compute mid-point based on direction
-                    a_start = math.atan2(sy - cy, sx - cx)
-                    a_end = math.atan2(ey - cy, ex - cx)
-                    def norm(a):
-                        while a < 0:
-                            a += 2 * math.pi
-                        while a >= 2 * math.pi:
-                            a -= 2 * math.pi
-                        return a
-                    a_start = norm(a_start)
-                    a_end = norm(a_end)
-                    direction = str(data.get('dir', 'ccw')).lower()
-                    if direction == 'ccw':
-                        delta = a_end - a_start
-                        if delta < 0:
-                            delta += 2 * math.pi
+                    # Prefer recorded sweep if available
+                    if 'sweep_rad' in data:
+                        a_start = math.atan2(sy - cy, sx - cx)
+                        a_mid = a_start + float(data['sweep_rad']) / 2.0
+                        mid = App.Vector(cx + float(data['radius']) * math.cos(a_mid),
+                                         cy + float(data['radius']) * math.sin(a_mid), 0)
                     else:
-                        delta = a_end - a_start
-                        if delta > 0:
-                            delta -= 2 * math.pi
-                    a_mid = a_start + delta / 2.0
-                    mid = App.Vector(cx + float(data['radius']) * math.cos(a_mid),
-                                     cy + float(data['radius']) * math.sin(a_mid), 0)
+                        # compute mid based on direction
+                        a_start = math.atan2(sy - cy, sx - cx)
+                        a_end = math.atan2(ey - cy, ex - cx)
+                        def norm(a):
+                            while a < 0:
+                                a += 2 * math.pi
+                            while a >= 2 * math.pi:
+                                a -= 2 * math.pi
+                            return a
+                        a_start = norm(a_start)
+                        a_end = norm(a_end)
+                        direction = str(data.get('dir', 'ccw')).lower()
+                        if direction == 'ccw':
+                            delta = a_end - a_start
+                            if delta < 0:
+                                delta += 2 * math.pi
+                        else:
+                            delta = a_end - a_start
+                            if delta > 0:
+                                delta -= 2 * math.pi
+                        a_mid = a_start + delta / 2.0
+                        mid = App.Vector(cx + float(data['radius']) * math.cos(a_mid),
+                                         cy + float(data['radius']) * math.sin(a_mid), 0)
                     arc3 = Part.Arc(App.Vector(sx, sy, 0), mid, App.Vector(ex, ey, 0))
                     sk.addGeometry(arc3, False)
                     last = (ex, ey)

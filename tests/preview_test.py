@@ -68,7 +68,8 @@ def main() -> None:
     build_part_src = _extract_build_part(src_path)
 
     # Persistent preview directory so FreeCAD can load files reliably
-    preview_dir = (repo_root / "build" / "preview").resolve()
+    # Keep preview artifacts under tests/build/ so it's easy to clean
+    preview_dir = (repo_root / "tests" / "build" / "preview").resolve()
     preview_dir.mkdir(parents=True, exist_ok=True)
     script_py = preview_dir / "preview_part.py"
     runner_py = preview_dir / "runner_preview.py"

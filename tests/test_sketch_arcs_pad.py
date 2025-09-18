@@ -33,7 +33,22 @@ def main() -> None:
     assert bb[2] == 0.0 and bb[5] == 10.0
     # Expect roughly x in [-5, 5] based on chosen geometry
     assert bb[0] <= -5.0 + 1e-6 and bb[3] >= 5.0 - 1e-6
-    assert data["volume"] > 0
+    # Strong volume check: area = semicircle (pi R^2 / 2) + rectangle (2R^2) - quarter circle (pi R^2 / 4)
+    R = 5.0
+    H = 10.0
+    expected_area = (math.pi * R * R / 2.0) + (2.0 * R * R) - (math.pi * R * R / 4.0)
+    expected_vol = expected_area * H
+    # If the top arc is missing, edge_kinds.circle will be 0 or 1 instead of >=2.
+    # Use this to fail explicitly before volume mismatch surprises us.
+    ek = data.get("counts", {}).get("edge_kinds", {})
+    assert ek.get("circle", 0) >= 2, f"Expected at least 2 circular edges, got {ek}"
+    # Check that at least one arc length approximates a semicircle of radius R
+    circle_lengths = (data.get("edge_metrics", {}) or {}).get("circle_lengths", [])
+    assert circle_lengths, "No circle/arc lengths reported"
+    # We expect ~pi*R for the top semicircle (within a generous tolerance)
+    assert any(abs(L - math.pi * R) < 0.5 for L in circle_lengths), (
+        f"No arc length close to semicircle; lengths={circle_lengths}")
+    assert abs(data["volume"] - expected_vol) < 1e-2
 
 
 def test_sketch_arcs_pad():

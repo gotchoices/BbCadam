@@ -19,6 +19,32 @@ This document describes the proposed DSL, authoring contract, and light guardrai
 BbCadam auto-exposes the DSL in the script’s global namespace. You can also import it explicitly as `from bbcadam.api import *` or `import bbcadam.api as dsl`.
 
 ## Light guardrails
+## Debug logging (opt-in)
+Minimal logging for debugging is built-in and disabled by default.
+
+Enable via environment variables when running CLI/tests:
+
+```
+# Turn on logging
+BB_LOG_ENABLE=1 
+
+# Choose tags (comma-separated) or '*' for all
+BB_LOG_TAGS=arc,sketch
+
+# Optional file; if omitted logs go to FreeCAD Report view (GUI) or stdout
+BB_LOG_FILE=tests/build/arc.log
+```
+
+In code, logging sites call:
+```
+from bbcadam.api import log
+log('arc', f"params S={S} C={C} E={E} R={R}")
+```
+
+Notes:
+- When run under FreeCAD GUI, messages appear in the Report view if no BB_LOG_FILE.
+- Under pytest/FreeCADCmd, write to BB_LOG_FILE or run with `-s` to see stdout.
+
 - Raw FreeCAD is not pre-imported. If you need primitives or advanced features, explicitly import them:
   - `import FreeCAD as App, Part`
 - BbCadam logs when FreeCAD modules appear during a build (warning only). CI can surface warnings.

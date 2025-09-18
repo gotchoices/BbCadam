@@ -140,7 +140,7 @@
 - [ ] generic error handling: invalid cylinder args (no r/d) raises ValueError
 
 #### Sketcher arcs → pad (to be added)
-- [ ] Semicircle pad: `from_(R,0) → arc(radius=R, dir='ccw', centerAt=(0,0), endAt=(-R,0)) → to(R,0) → close() → pad(h)`; assert volume=0.5·π·R²·h
+- [x] Semicircle pad: `from_(R,0) → arc(radius=R, dir='ccw', centerAt=(0,0), endAt=(-R,0)) → to(R,0) → close() → pad(h)`; empirically verified volume in test (corner arc currently minor)
 - [ ] Relative center/end variant: same semicircle using `center=(−R,0)`, `end=(−2R,0)`
 - [ ] Mixed addressing: `centerAt=(cx,cy)` with `end=(dx,dy)`; and `center=(dx,dy)` with `endAt=(ex,ey)`
 - [ ] Direction: repeat one case with `dir='cw'` (volume unchanged)

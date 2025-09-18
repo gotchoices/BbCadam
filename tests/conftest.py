@@ -46,7 +46,7 @@ def run_abbrev_script_and_load_json(source_py: str, work_dir: Path) -> dict:
     """
     script = work_dir / "script.py"
     script.write_text(source_py)
-    result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True)
+    result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True, cwd=str(work_dir))
     if result.returncode != 0:
         raise AssertionError(f"bbcadam-build failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
     out_path = script.with_suffix('.json')
@@ -78,7 +78,7 @@ def run_build_part_callable(build_part_fn, work_dir: Path) -> dict:
     full = src + "\n" + wrapper
     script = work_dir / "script.py"
     script.write_text(full)
-    result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True)
+    result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True, cwd=str(work_dir))
     if result.returncode != 0:
         raise AssertionError(f"bbcadam-build failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
     out_path = script.with_suffix('.json')

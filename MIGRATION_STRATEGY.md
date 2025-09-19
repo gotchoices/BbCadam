@@ -220,3 +220,22 @@ import bbcadam
 - Standard installation methods
 - Version management
 - Dependency handling
+
+### 10. Phase 2: Internal Refactor (non-breaking)
+
+Goals (no surface API break):
+- Isolate concerns so logic is testable and extensible:
+  - `bbcadam/core/`
+    - `dsl_core.py`: Feature, param, export, logging
+    - `primitives.py`: box, cylinder
+    - `profiles.py`: profile/section geometry adapters (wire/face builders)
+    - `assemblies.py`: component helpers
+  - `bbcadam/backends/`
+    - `part.py`: PartSectionBackend (extrude/revolve/sweep)
+    - `sketcher.py`: SketcherSectionBackend (materialization)
+- Keep `bbcadam/api.py` re-exporting the public DSL so user code, tests, and docs stay stable during the move.
+- Incrementally move implementations into the new modules behind the same interface, guarded by the existing test suite (primitives, arcs, planes, errors, exports, etc.).
+
+Relation to 3D profile:
+- Prepares for the 3D “profile” (successor to `section`) by decoupling 2D path building from backends.
+- After Phase 2 is complete and tests are green, introduce `profile(...)` alongside `section(...)`, implement 3D path ops in `core/profiles.py`, and route them through a 3D-capable backend (`backends/part.py`).

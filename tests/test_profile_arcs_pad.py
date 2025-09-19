@@ -1,0 +1,56 @@
+"""Profile 2D arcs → pad integration test.
+
+Builds a closed 2D shape using `profile()` with lines and arcs, then pads and
+asserts on bbox/volume plausibility. Mirrors sketch-based test to validate alias.
+"""
+
+from pathlib import Path
+import math
+from .conftest import run_build_part_callable
+
+
+def build_part(ctx):
+    p = profile(name='A', plane='XY', at=(0, 0, 0))
+    R = 5.0
+    H = 10.0
+    # Start at (R,0)
+    p.from_(R, 0)
+    # 1) Center+end (absolute): semicircle to (-R,0) ccw
+    p.arc(radius=R, dir='ccw', centerAt=(0, 0), endAt=(-R, 0))
+    # 2) Line down to (-R,-R), then line right to (R,-R)
+    p.to(-R, -R)
+    p.to(R, -R)
+    # 3) R+E+dir: arc up to (R,0) with radius R, dir=ccw (center inferred)
+    p.arc(radius=R, endAt=(R, 0), dir='ccw')
+    p.close()
+    # Pad and commit
+    p.pad(H).add()
+
+
+def main() -> None:
+    data = run_build_part_callable(build_part, Path.cwd())
+    bb = data["bbox"]
+    assert bb[2] == 0.0 and bb[5] == 10.0
+    # Expect roughly x in [-5, 5]
+    assert bb[0] <= -5.0 + 1e-6 and bb[3] >= 5.0 - 1e-6
+    # Strong volume check via edge metrics (like sketch test)
+    R = 5.0
+    ek = data.get("counts", {}).get("edge_kinds", {})
+    assert ek.get("circle", 0) >= 2, f"Expected at least 2 circular edges, got {ek}"
+    circle_lengths = (data.get("edge_metrics", {}) or {}).get("circle_lengths", [])
+    assert circle_lengths, "No circle/arc lengths reported"
+    assert any(abs(L - math.pi * R) < 0.5 for L in circle_lengths), (
+        f"No arc length close to semicircle; lengths={circle_lengths}")
+    # Empirical volume matching the sketch-based case
+    expected_vol = 915.3456001252441
+    assert abs(data["volume"] - expected_vol) < 1e-2
+
+
+def test_profile_arcs_pad():
+    main()
+
+
+if __name__ == "__main__":
+    main()
+
+

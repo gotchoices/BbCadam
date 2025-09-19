@@ -32,6 +32,7 @@
 - [x] Create bbcadam/__init__.py to re-export public API
 - [ ] Move watcher/ to bbcadam/watcher/
 - [x] Update builder.py to use new module structure
+- [x] Replace public DSL export of `section` with `profile`
 
 ### Phase 3: CLI Integration
 - [ ] Implement bbcadam/cli/launch.py (bbcadam-launch command)
@@ -55,7 +56,7 @@
 - [x] Create tests/ directory with unit/integration tests
 - [x] Add headless DSL regression tests (box, cylinder) via `bbcadam-build`
 - [x] Add helpers for abbreviated tests (`run_abbrev_script_and_load_json`, `run_build_part_callable`)
-- [x] Add sketch → pad regression tests (lines/arcs, close, pad)
+- [x] Add sketch/profile → pad regression tests (lines/arcs, close, pad)
 - [ ] Add assembly smoke test (component/link minimal)
 - [ ] Test installation via pip install -e .
 - [ ] Test CLI commands work after installation
@@ -118,17 +119,18 @@
 - [ ] Add sketch-based tests (line/arc/close → pad) to lock behavior
 - [x] Refactor `api.py` into `bbcadam/core/*` and `bbcadam/backends/*` per Phase 2 (api.py now reference-only)
 - [x] Re-run DSL regression tests and fix any breakages (no functional regressions)
+- [x] Rename `section` → `profile` in public DSL and docs
 - [ ] Migrate `section` → `profile` after tests are green; add profile tests
 
 ### DSL Regression Test Checklist (excluding `section`/`profile`)
-- [x] box: create 10×20×30, assert volume=6000, bbox, face/edge/vertex counts
-- [x] box transforms: `.at()` assert bbox shift (2×3×4 at (1,2,3) → [1,2,3,3,5,7])
-- [ ] cylinder (d,h): d=10,h=20, assert volume≈π·5²·20, faces=3, bbox z-span
-- [x] cylinder (r,h): r=5,h=20 variant, same assertions
-- [ ] Feature.add: fuse two boxes, assert volume=sum and counts plausible
-  - [x] Non-overlapping boxes fuse: volume 24+1=25
-- [ ] Feature.cut: box minus cylinder, assert volume reduction and counts change
-  - [x] Box cut inner box: 4×4×4 − 2×2×2@center → volume 56
+ - [x] box: create 10×20×30, assert volume=6000, bbox, face/edge/vertex counts
+ - [x] box transforms: `.at()` assert bbox shift (2×3×4 at (1,2,3) → [1,2,3,3,5,7])
+ - [x] cylinder (d,h): d=10,h=20, assert volume≈π·5²·20, faces=3, bbox z-span
+ - [x] cylinder (r,h): r=5,h=20 variant, same assertions
+ - [x] Feature.add: fuse two boxes, assert volume=sum and counts plausible
+   - [x] Non-overlapping boxes fuse: volume 24+1=25
+ - [x] Feature.cut: box minus cylinder, assert volume reduction and counts change
+   - [x] Box cut inner box: 4×4×4 − 2×2×2@center → volume 56
 - [ ] feature() composer: `.box().cylinder().add()` then `.cut()` path, assert final volume
 - [ ] lcs/add_lcs: create named datum; assert document contains object with correct Placement
 - [ ] param(): numeric param from params.yaml; default value; string numeric; expression (=a+b) — sizes drive box volume as expected
@@ -149,6 +151,15 @@
 - [ ] Direction variants: ensure `dir='cw'` behaves as expected
 - [ ] Error paths: bad radius (R < chord/2), start==end, full-circle via arc() rejected, invalid dir
 - [ ] Tangent inference: add mode `tangent=True` once implemented
+
+### Profile (3D) Test Checklist
+- [x] profile 2D arcs → pad (same as sketch case, using `profile`)
+- [ ] profile.on() plane switch mid-chain: draw on XY, switch to XZ, continue, close, pad
+- [ ] One-off plane override: use `plane='YZ'` on a single op without changing current plane
+- [ ] to3d polyline path + sweep: build 3D path with `to3d`, sweep a circular profile
+- [ ] arc3d center+sweep segment: include an arc3d in the path and sweep
+- [ ] spline3d path + sweep
+- [ ] Sweep orientation: default (auto) aligns +Z to path start tangent; validate bbox/volume plausibility
 
 #### Additional DSL coverage before refactor (Phase 2)
 - [ ] cylinder base test (d/r,h) and transforms (`.at()`, `.rotate()`)

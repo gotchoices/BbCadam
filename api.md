@@ -77,25 +77,25 @@ Feature.color((r,g,b))      # set color (floats 0..1) on final object
 Feature.appearance(color=(r,g,b), opacity=0..100)
 ```
 
-Section profiles → Feature (extrusions/revolves/sweeps):
+Profiles → Feature (extrusions/revolves/sweeps):
 ```python
-section(name=None, plane='XY', at=(0,0,0)) -> Section
-sketch(name=None, plane='XY', at=(0,0,0), visible=True) -> Section  # materializes Sketcher object; visibility controllable
+profile(name=None, plane='XY', at=(0,0,0)) -> Profile
+sketch(name=None, plane='XY', at=(0,0,0), visible=True) -> Profile  # materializes Sketcher object; visibility controllable
 
-# 2D drawing on Section (fluent)
-Section.circle(d=None, r=None, at=(x,y))
-Section.rectangle(w, h=None, at=(x,y))
-Section.polygon(n=6, side=None, d=None, at=(x,y))
-Section.from_(x=None, y=None)
-Section.to(x=None, y=None)
-Section.go(dx=None, dy=None, r=None, a_deg=None)
-Section.arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)
-Section.close()
+# 2D drawing on Profile (fluent)
+Profile.circle(d=None, r=None, at=(x,y))
+Profile.rectangle(w, h=None, at=(x,y))
+Profile.polygon(n=6, side=None, d=None, at=(x,y))
+Profile.from_(x=None, y=None)
+Profile.to(x=None, y=None)
+Profile.go(dx=None, dy=None, r=None, a_deg=None)
+Profile.arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)
+Profile.close()
 
 # 3D ops (return Feature)
-Section.pad(dist, dir='+Z')
-Section.revolve(angle_deg=360, axis='Z')
-Section.sweep(path_section)  # sweep along a path Section (lines/arcs)
+Profile.pad(dist, dir='+Z')
+Profile.revolve(angle_deg=360, axis='Z')
+Profile.sweep(path_profile)  # sweep along a path Profile (lines/arcs)
 ```
 
 Holes: include inner profiles (e.g., `circle` inside a `rectangle`), then `pad` to produce solids with voids.
@@ -211,7 +211,17 @@ Existing helpers `export_step(name)` and `export_stl(name)` may remain for expli
 
 Default: Part-based for performance and simplicity; use `sketch(...)` (instead of `section(...)`) to emit a `Sketcher::SketchObject` as a sibling for visualization (no constraints initially). You can control visibility via `sketch(..., visible=True|False)`. Plane selection is supported via `plane='XY'|'XZ'|'YZ'` and `at=(x,y,0)` offset.
 
-### Arc specification and validation
+### Plane control (2D/3D)
+Two mechanisms:
+- `Profile.on(plane, origin=None, ...)` sets the current plane permanently until changed.
+- Any drawing op may accept `plane=...` as a temporary one-off override.
+
+Plane specifiers:
+- 'XY' | 'XZ' | 'YZ'
+- `LCS:Name` (datum/LCS)
+- Future: freeform plane via `(origin, normal[, x_axis])`
+
+### 2D Arc specification and validation
 - Signature: `arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)`
 - Supported minimal combos (S=start, C=center, E=end, R=radius, θ=sweep, D=dir, T=tangent):
   - C + E [+R optional] → R inferred from |CS| (must match |CE|); θ from geometry and D (minor by default)
@@ -225,7 +235,16 @@ Default: Part-based for performance and simplicity; use `sketch(...)` (instead o
   - dir must be `'ccw'` or `'cw'` if used; radius > 0
   - Start/end must lie at distance R from C (tolerance ~1e-4) when provided
   - Degenerate sweeps rejected; full-circle via `arc()` rejected (use `circle()`)
-  - Coordinates respect section plane mapping (XY/XZ/YZ)
+  - Coordinates respect profile plane mapping (XY/XZ/YZ)
+
+### 3D Path (experimental)
+Rough-in APIs (recorded; materialization WIP):
+```python
+Profile.to3d(x, y, z)
+Profile.arc3d(center=(cx,cy,cz), end=(ex,ey,ez), sweep=None, dir='ccw')
+Profile.spline3d([(x1,y1,z1), (x2,y2,z2), ...], tangents=None)
+Profile.helix3d(radius, pitch, turns=None, height=None, axis='Z')
+```
 
 ### Sweep orientation behavior
 - By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.

@@ -24,7 +24,7 @@ try:
         feature,
     )
     # Expose internals needed by builder
-    _finish_build = __import__('bbcadam.core.dsl_core', fromlist=['_finish_build'])._finish_build
+    from .core.dsl_core import _finish_build
     from .core.profiles import section, sketch
     # Provide export() facade that finishes build and delegates to core
     def export(kinds=None, name=None, to=None):

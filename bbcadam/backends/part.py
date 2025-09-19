@@ -11,9 +11,11 @@ from ..core.dsl_core import Feature
 
 class PartSectionBackend:
     def _build_face_with_holes(self, section):
+        """Build a Part.Face from section profile with any hole wires applied."""
         return PartProfileAdapter(section._profile).build_face_with_holes()
 
     def pad(self, section, dist, dir='+'):
+        """Extrude face along section normal by dist (positive or negative with dir)."""
         face = self._build_face_with_holes(section)
         dist = float(dist)
         placed_face = section._place_shape(face)
@@ -33,6 +35,7 @@ class PartSectionBackend:
         return Feature(solid)
 
     def revolve(self, section, angle_deg=360.0, axis='Y'):
+        """Revolve face about principal axis (X/Y/Z) by angle_deg degrees."""
         face = self._build_face_with_holes(section)
         ax = axis.upper()
         if ax == 'X':
@@ -52,6 +55,7 @@ class PartSectionBackend:
         return Feature(solid)
 
     def sweep(self, section, path_section):
+        """Sweep face along open path defined by path_section (pipe shell)."""
         import Part
         face = self._build_face_with_holes(section)
         path_wire = PartProfileAdapter(path_section._profile).build_open_wire()

@@ -11,27 +11,27 @@
 ## Migration to Standalone Package
 
 ### Phase 1: Package Structure & Setup
-- [ ] Create new package structure (bbcadam/ instead of BbCadam/)
-- [ ] Create setup.py with entry points for CLI tools
-- [ ] Create pyproject.toml for modern Python packaging
-- [ ] Add LICENSE file
-- [ ] Create bbcadam/__init__.py with proper package initialization
-- [ ] Move tools/ scripts to scripts/ directory
-- [ ] Create bbcadam/cli/ module for CLI entry points
-- [ ] Create bbcadam-py shebang wrapper script
+- [x] Create new package structure (bbcadam/ instead of BbCadam/)
+- [x] Create setup.py with entry points for CLI tools
+- [x] Create pyproject.toml for modern Python packaging
+- [x] Add LICENSE file
+- [x] Create bbcadam/__init__.py with proper package initialization
+- [x] Move tools/ scripts to scripts/ directory
+- [x] Create bbcadam/cli/ module for CLI entry points
+- [x] Create bbcadam-py shebang wrapper script
 
 ### Phase 2: Code Refactoring
-- [ ] Refactor api.py into modules:
-  - [ ] bbcadam/core/dsl_core.py (Feature, param, export)
-  - [ ] bbcadam/core/profiles.py (geometry classes: lines, arcs, circles; adapters)
-  - [ ] bbcadam/core/primitives.py (box, cylinder)
+- [x] Refactor api.py into modules:
+  - [x] bbcadam/core/dsl_core.py (Feature, param, export)
+  - [x] bbcadam/core/profiles.py (geometry classes: lines, arcs, circles; adapters)
+  - [x] bbcadam/core/primitives.py (box, cylinder)
   - [ ] bbcadam/core/assemblies.py (component helpers)
-  - [ ] bbcadam/backends/part.py (PartSectionBackend)
-  - [ ] bbcadam/backends/sketcher.py (SketcherSectionBackend)
-- [ ] Update all imports to use new module structure
-- [ ] Create bbcadam/__init__.py to re-export public API
+  - [x] bbcadam/backends/part.py (PartSectionBackend)
+  - [x] bbcadam/backends/sketcher.py (SketcherSectionBackend)
+- [x] Update all imports to use new module structure
+- [x] Create bbcadam/__init__.py to re-export public API
 - [ ] Move watcher/ to bbcadam/watcher/
-- [ ] Update builder.py to use new module structure
+- [x] Update builder.py to use new module structure
 
 ### Phase 3: CLI Integration
 - [ ] Implement bbcadam/cli/launch.py (bbcadam-launch command)
@@ -55,7 +55,7 @@
 - [x] Create tests/ directory with unit/integration tests
 - [x] Add headless DSL regression tests (box, cylinder) via `bbcadam-build`
 - [x] Add helpers for abbreviated tests (`run_abbrev_script_and_load_json`, `run_build_part_callable`)
-- [ ] Add sketch → pad regression tests (lines/arcs, close, pad)
+- [x] Add sketch → pad regression tests (lines/arcs, close, pad)
 - [ ] Add assembly smoke test (component/link minimal)
 - [ ] Test installation via pip install -e .
 - [ ] Test CLI commands work after installation
@@ -116,8 +116,8 @@
 ## DSL Refactor & Regression Strategy
 - [x] Establish initial DSL regression tests (box, cylinder JSON export; headless)
 - [ ] Add sketch-based tests (line/arc/close → pad) to lock behavior
-- [ ] Refactor `api.py` into `bbcadam/core/*` and `bbcadam/backends/*` per Phase 2
-- [ ] Re-run DSL regression tests and fix any breakages (no functional regressions)
+- [x] Refactor `api.py` into `bbcadam/core/*` and `bbcadam/backends/*` per Phase 2 (api.py now reference-only)
+- [x] Re-run DSL regression tests and fix any breakages (no functional regressions)
 - [ ] Migrate `section` → `profile` after tests are green; add profile tests
 
 ### DSL Regression Test Checklist (excluding `section`/`profile`)

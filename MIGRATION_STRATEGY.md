@@ -20,7 +20,7 @@ bbcadam/                          # Main package (renamed from BbCadam)
 ├── LICENSE                       # License file
 ├── bbcadam/                      # Python package
 │   ├── __init__.py              # Package initialization
-│   ├── api.py                   # Core DSL API
+│   ├── api.py                   # Reference only (legacy snapshot; not imported)
 │   ├── builder.py               # Build system
 │   ├── core/                    # Core modules
 │   │   ├── __init__.py
@@ -38,9 +38,7 @@ bbcadam/                          # Main package (renamed from BbCadam)
 │   │   ├── build.py             # Headless build
 │   │   ├── dump.py              # Debug dump
 │   │   └── runner.py            # Shebang wrapper
-│   └── watcher/                 # File watching system
-│       ├── __init__.py
-│       └── watch_specs.py
+│   └── watcher/                 # (Removed; in-GUI watcher integrated via CLI)
 ├── scripts/                     # Executable scripts
 │   ├── bbcadam-launch           # CLI entry point
 │   ├── bbcadam-build            # CLI entry point
@@ -233,8 +231,8 @@ Goals (no surface API break):
   - `bbcadam/backends/`
     - `part.py`: PartSectionBackend (extrude/revolve/sweep)
     - `sketcher.py`: SketcherSectionBackend (materialization)
-- Keep `bbcadam/api.py` re-exporting the public DSL so user code, tests, and docs stay stable during the move.
-- Incrementally move implementations into the new modules behind the same interface, guarded by the existing test suite (primitives, arcs, planes, errors, exports, etc.).
+- Keep `bbcadam/api.py` as reference-only (not imported by the package); all functionality now lives in `core/*` and `backends/*`.
+- Migration completed: implementations moved into the new modules and verified by the test suite (primitives, arcs, planes, errors, exports).
 
 Relation to 3D profile:
 - Prepares for the 3D “profile” (successor to `section`) by decoupling 2D path building from backends.

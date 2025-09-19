@@ -15,6 +15,14 @@ from .dsl_core import _set_ctx as set_ctx  # re-export if needed
 
 class Section:
     def __init__(self, name=None, plane='XY', at=(0.0, 0.0, 0.0), backend=None, visible: bool = True):
+        """Create a new 2D section/profile.
+
+        - name: optional label for debugging/materialization
+        - plane: 'XY' | 'XZ' | 'YZ' or 'LCS:Name' to place on datum/LCS
+        - at: local offset within the chosen plane/datum
+        - backend: Part or Sketcher backend (Part by default)
+        - visible: for Sketcher backend, show sketch in GUI
+        """
         self.name = name or 'Sketch'
         self.plane = str(plane).upper()
         self.origin = at
@@ -55,32 +63,44 @@ class Section:
 
     # 2D primitives
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
+        """Add a circle to the profile (outer or hole).
+        Provide diameter d or radius r; at is the center in section plane.
+        """
         at_m = self._map_tuple(at)
         self._profile.circle(d=d, r=r, at=at_m, hole=hole)
         return self
 
     def rectangle(self, w, h=None, at=(0.0, 0.0), hole=False):
+        """Add an axis-aligned rectangle (outer or hole).
+        Width w, height h (defaults to w); centered at 'at'.
+        """
         at_m = self._map_tuple(at)
         self._profile.rectangle(w=w, h=h, at=at_m, hole=hole)
         return self
 
     def polygon(self, n=6, side=None, d=None, at=(0.0, 0.0), hole=False):
+        """Add a regular polygon with n sides (outer or hole).
+        Provide side length or circumscribed diameter d; centered at 'at'.
+        """
         at_m = self._map_tuple(at)
         self._profile.polygon(n=n, side=side, d=d, at=at_m, hole=hole)
         return self
 
     # Path builder
     def from_(self, x=None, y=None, hole=False):
+        """Move the path cursor to (x,y) and start a new path (optionally a hole)."""
         mx, my = self._map_xy(x, y)
         self._profile.from_(x=mx, y=my, hole=hole)
         return self
 
     def to(self, x=None, y=None):
+        """Add a straight line from the current cursor to (x,y)."""
         mx, my = self._map_xy(x, y)
         self._profile.to(x=mx, y=my)
         return self
 
     def go(self, dx=None, dy=None, r=None, a_deg=None):
+        """Relative line: move by (dx,dy) or by polar (r,a_deg)."""
         if self.plane == 'YZ':
             if r is not None and a_deg is not None:
                 import math
@@ -96,6 +116,12 @@ class Section:
         return self
 
     def arc(self, radius=None, dir='ccw', end=None, endAt=None, center=None, centerAt=None, sweep=None, tangent=False):
+        """Add a circular arc. Modes:
+        - center(+radius)+end
+        - center(+radius)+sweep (end inferred)
+        - radius+end+dir (center inferred, minor arc)
+        - radius+end+sweep (center inferred)
+        """
         import math
         # Map inputs
         end_in = endAt if endAt is not None else end
@@ -164,17 +190,21 @@ class Section:
         return self
 
     def close(self):
+        """Close the current path to the starting point and finalize it."""
         self._profile.close()
         return self
 
     # 3D ops
     def pad(self, dist, dir='+'):
+        """Extrude the closed profile by dist along section normal (sign by dir)."""
         return self._backend.pad(self, dist, dir)
 
     def revolve(self, angle_deg=360.0, axis='Y'):
+        """Revolve the closed profile around X/Y/Z by angle_deg degrees."""
         return self._backend.revolve(self, angle_deg, axis)
 
     def sweep(self, path_section):
+        """Sweep the closed profile along an open path defined by another Section."""
         return self._backend.sweep(self, path_section)
 
     def _place_shape(self, shape):

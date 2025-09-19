@@ -399,26 +399,29 @@ def _resolve_export_kinds(kinds):
 
 
 def export(kinds=None, name=None, to=None):
-    """Export the current part in one or more formats.
+    """Export the current part in one or more formats (delegates to core).
 
     kinds: str or list[str] among {'step','stl','json','brep'}
     name: optional part name override for file outputs
     to: for 'json' and 'brep' only: '-' to stdout or Path to file
     """
-    kinds_list = _resolve_export_kinds(kinds)
     obj = _finish_build(name or _CTX.part_name)
     if not obj:
         return
-    # File-based formats
-    if 'step' in kinds_list:
-        _export_step(obj, _CTX.paths.step_parts / f"{_CTX.part_name}.step")
-    if 'stl' in kinds_list:
-        _export_stl(obj, _CTX.paths.stl_parts / f"{_CTX.part_name}.stl")
-    # Stream/file formats for tests/inspection
-    if 'json' in kinds_list:
-        _export_json(obj, to)
-    if 'brep' in kinds_list:
-        _export_brep(obj, to)
+    try:
+        from .core.dsl_core import export_formats as _export_formats
+        _export_formats(_CTX, obj, kinds=kinds, name=name, to=to)
+    except Exception:
+        # Fallback to legacy path if core export unavailable
+        kinds_list = _resolve_export_kinds(kinds)
+        if 'step' in kinds_list:
+            _export_step(obj, _CTX.paths.step_parts / f"{_CTX.part_name}.step")
+        if 'stl' in kinds_list:
+            _export_stl(obj, _CTX.paths.stl_parts / f"{_CTX.part_name}.stl")
+        if 'json' in kinds_list:
+            _export_json(obj, to)
+        if 'brep' in kinds_list:
+            _export_brep(obj, to)
 
 
 def export_step(part_name: str):

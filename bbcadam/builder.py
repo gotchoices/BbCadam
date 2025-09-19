@@ -5,7 +5,8 @@ from pathlib import Path
 
 import FreeCAD as App
 
-from . import api as dsl
+# Use package-level DSL facade (prefers new scaffold; api remains as reference)
+import bbcadam as dsl
 
 
 class Paths:

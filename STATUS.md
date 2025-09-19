@@ -149,6 +149,26 @@
 - [ ] Direction variants: ensure `dir='cw'` behaves as expected
 - [ ] Error paths: bad radius (R < chord/2), start==end, full-circle via arc() rejected, invalid dir
 - [ ] Tangent inference: add mode `tangent=True` once implemented
+
+#### Additional DSL coverage before refactor (Phase 2)
+- [ ] cylinder base test (d/r,h) and transforms (`.at()`, `.rotate()`)
+- [ ] box boolean ops: add/cut with overlapping and contained cases
+- [ ] feature() composer: build tool with add+cut and assert final volume
+- [ ] param(): numeric, string numeric, expression ("=a+b"), default, missing raises
+- [ ] exports: `export('step')`, `export('stl')`, `export(['step','stl'])` create files in expected dirs
+- [ ] appearance: `.color()`, `.opacity()` are no-ops headless (no errors)
+- [ ] LCS/Datum: `lcs()` created with correct Placement (headless-safe assertions)
+
+#### Sketch shapes (non-path primitives)
+- [ ] circle(): outer and hole variants pad correctly
+- [ ] rectangle(): axis-aligned rectangle; optional h omitted → square
+- [ ] polygon(): n-gon via side or circumscribed d; pad and hole
+- [ ] Combined: rectangle with circular hole; pad volume matches area·h
+
+#### Future shape helpers (to plan/implement)
+- [ ] ellipse()/elliptical arc (if feasible with Part or Sketcher)
+- [ ] slot() helper (two arcs + tangents)
+- [ ] fillet() on path corners (post-closure or during path build)
 - [ ] Relative center/end variant: same semicircle using `center=(−R,0)`, `end=(−2R,0)`
 - [ ] Mixed addressing: `centerAt=(cx,cy)` with `end=(dx,dy)`; and `center=(dx,dy)` with `endAt=(ex,ey)`
 - [ ] Direction: repeat one case with `dir='cw'` (volume unchanged)

@@ -110,6 +110,11 @@ def main():
         if proc.stderr:
             print(proc.stderr, end="")
     except subprocess.CalledProcessError as e:
+        # Surface child process output so tests can assert on errors
+        if e.stdout:
+            print(e.stdout, end="")
+        if e.stderr:
+            print(e.stderr, end="")
         print(f"Error building: {e}")
         sys.exit(1)
     except KeyboardInterrupt:

@@ -106,3 +106,19 @@ def run_build_part_callable(build_part_fn, work_dir: Path) -> dict:
         raise AssertionError(f"Expected JSON not found: {out_path}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
     import json
     return json.loads(out_path.read_text())
+
+
+def run_abbrev_script_expect_failure(source_py: str, work_dir: Path, expect_substr: str) -> None:
+    """Run an abbreviated DSL script expecting failure; assert message appears.
+
+    - Writes the provided source to a temp .py under a safe tmp dir
+    - Invokes bbcadam-build on it
+    - Asserts non-zero return code and error text contains expect_substr
+    """
+    work_dir = _resolve_work_dir(work_dir)
+    script = work_dir / "script.py"
+    script.write_text(source_py)
+    result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True, cwd=str(work_dir))
+    assert result.returncode != 0, "Expected bbcadam-build to fail"
+    combined = (result.stdout or "") + "\n" + (result.stderr or "")
+    assert expect_substr in combined, f"Expected '{expect_substr}' in output; got:\n{combined}"

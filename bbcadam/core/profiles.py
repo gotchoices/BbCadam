@@ -61,6 +61,36 @@ class Section:
             return (p[1], p[0])
         return p
 
+    def on(self, plane=None, origin=None, normal=None, x_axis=None, rotate=None, translate=None, inherit=True):
+        """Set the current working plane/frame for subsequent ops.
+
+        Minimal implementation supports plane ('XY'|'XZ'|'YZ'|'LCS:Name') and origin.
+        Other arguments are accepted for future extensions.
+        """
+        try:
+            if plane is not None:
+                if isinstance(plane, str):
+                    p = plane.strip()
+                    self.plane = p.split(':', 1)[0].upper()
+                    self._datum_placement = None
+                    key = p.split(':', 1)[0]
+                    if key in ('LCS', 'DATUM') and ':' in p:
+                        obj_name = p.split(':', 1)[1]
+                        from .dsl_core import _CTX
+                        doc = _CTX.doc if _CTX else None
+                        if doc:
+                            obj = doc.getObject(obj_name)
+                            if obj and hasattr(obj, 'Placement'):
+                                self._datum_placement = obj.Placement
+                else:
+                    # Future: accept freeform plane tuples/objects
+                    pass
+            if origin is not None:
+                self.origin = origin
+        except Exception:
+            pass
+        return self
+
     # 2D primitives
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
         """Add a circle to the profile (outer or hole).
@@ -207,6 +237,55 @@ class Section:
         """Sweep the closed profile along an open path defined by another Section."""
         return self._backend.sweep(self, path_section)
 
+    # --- 3D path rough-ins ---
+    def to3d(self, x=None, y=None, z=None):
+        """Record an absolute 3D point in the profile's 3D path (experimental)."""
+        try:
+            px = float(x) if x is not None else 0.0
+            py = float(y) if y is not None else 0.0
+            pz = float(z) if z is not None else 0.0
+            self._profile._p3_cursor = (px, py, pz)
+            self._profile._geom3d.append(('p3', (px, py, pz)))
+        except Exception:
+            pass
+        return self
+
+    def arc3d(self, center=None, end=None, sweep=None, dir='ccw'):
+        """Record a 3D arc via center+end or center+sweep (experimental)."""
+        try:
+            data = {
+                'center': tuple(center) if center is not None else None,
+                'end': tuple(end) if end is not None else None,
+                'sweep': float(sweep) if sweep is not None else None,
+                'dir': str(dir),
+                'start': self._profile._p3_cursor,
+            }
+            self._profile._geom3d.append(('a3', data))
+            if end is not None:
+                self._profile._p3_cursor = tuple(end)
+        except Exception:
+            pass
+        return self
+
+    def spline3d(self, points, tangents=None):
+        """Record a 3D spline through points (experimental)."""
+        try:
+            pts = [tuple(p) for p in points]
+            self._profile._geom3d.append(('s3', {'points': pts, 'tangents': tangents}))
+            if pts:
+                self._profile._p3_cursor = pts[-1]
+        except Exception:
+            pass
+        return self
+
+    def helix3d(self, radius, pitch, turns=None, height=None, axis='Z'):
+        """Record a helical 3D segment (experimental)."""
+        try:
+            self._profile._geom3d.append(('h3', {'radius': float(radius), 'pitch': float(pitch), 'turns': turns, 'height': height, 'axis': str(axis)}))
+        except Exception:
+            pass
+        return self
+
     def _place_shape(self, shape):
         placed = shape.copy()
         if getattr(self, '_datum_placement', None) is not None:
@@ -238,7 +317,7 @@ def generic_section(materialized: bool = False, name=None, plane='XY', at=(0.0, 
     return Section(name=name, plane=plane, at=at, backend=backend, visible=visible)
 
 
-def section(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
+def profile(name=None, plane='XY', at=(0.0, 0.0, 0.0)):
     return generic_section(materialized=False, name=name, plane=plane, at=at)
 
 
@@ -256,6 +335,9 @@ class _SectionProfile:
         self._geom_outer = None
         self._geom_holes = []
         self._geom_current = None
+        # 3D path capture (rough-in)
+        self._p3_cursor = None
+        self._geom3d = []
 
     def circle(self, d=None, r=None, at=(0.0, 0.0), hole=False):
         import Part

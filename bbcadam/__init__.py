@@ -25,7 +25,7 @@ try:
     )
     # Expose internals needed by builder
     from .core.dsl_core import _finish_build
-    from .core.profiles import section, sketch
+    from .core.profiles import profile, sketch
     # Provide export() facade that finishes build and delegates to core
     def export(kinds=None, name=None, to=None):
         from .core.dsl_core import export_formats as _export_formats
@@ -55,7 +55,7 @@ try:
         "box",
         "cylinder",
         "feature",
-        "section",
+        "profile",
         "sketch",
         "lcs",
         "add_lcs",

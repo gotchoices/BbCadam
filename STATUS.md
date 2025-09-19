@@ -186,6 +186,7 @@
 - [x] Remove `scripts/install_generated_py.sh` (no longer needed with standalone packaging)
 - [x] Remove `scripts/find_freecad.sh` (logic incorporated into CLI detection)
 - [x] Remove `watcher/` package-local directory (watching now handled via user project + CLI)
+- [ ] Remove `bbcadam/api.py` after `section` → `profile` enhancements and associated tests are green
 
 ## Watcher Migration (port from legacy `watcher/watch_specs.py`)
 - [ ] Recreate watcher as `bbcadam.watcher` (library) invoked by `bbcadam-launch`

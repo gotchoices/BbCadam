@@ -9,6 +9,24 @@ import inspect
 import textwrap
 import subprocess
 import os
+import uuid
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _resolve_work_dir(work_dir: Path | None) -> Path:
+    """Choose a safe temp work dir under tests/build/tmp when work_dir is root/unspecified.
+
+    We keep artifacts under tests/build/ so preview_clean can remove them.
+    """
+    if work_dir is None or work_dir == _REPO_ROOT:
+        base = _REPO_ROOT / "tests" / "build" / "tmp"
+        base.mkdir(parents=True, exist_ok=True)
+        # Create a unique subfolder for this invocation
+        wd = base / f"run_{uuid.uuid4().hex[:8]}"
+        wd.mkdir(parents=True, exist_ok=True)
+        return wd
+    work_dir.mkdir(parents=True, exist_ok=True)
+    return work_dir
 
 
 @pytest.fixture
@@ -44,6 +62,7 @@ def run_abbrev_script_and_load_json(source_py: str, work_dir: Path) -> dict:
     - Invokes bbcadam-build on it
     - Reads the sibling .json file and returns parsed JSON
     """
+    work_dir = _resolve_work_dir(work_dir)
     script = work_dir / "script.py"
     script.write_text(source_py)
     result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True, cwd=str(work_dir))
@@ -76,6 +95,7 @@ def run_build_part_callable(build_part_fn, work_dir: Path) -> dict:
         """
     )
     full = src + "\n" + wrapper
+    work_dir = _resolve_work_dir(work_dir)
     script = work_dir / "script.py"
     script.write_text(full)
     result = subprocess.run(["bbcadam-build", str(script)], capture_output=True, text=True, cwd=str(work_dir))

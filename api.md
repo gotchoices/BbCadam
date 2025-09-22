@@ -70,6 +70,7 @@ Feature methods:
 Feature.at((x,y,z))
 Feature.translate((x,y,z))
 Feature.rotate(axis=(1,0,0), deg=0)
+Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound', basis='world')
 Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
 Feature.opacity(0..100)     # set transparency (0 opaque .. 100 fully transparent) on final object
@@ -245,6 +246,32 @@ Profile.arc3d(center=(cx,cy,cz), end=(ex,ey,ez), sweep=None, dir='ccw')
 Profile.spline3d([(x1,y1,z1), (x2,y2,z2), ...], tangents=None)
 Profile.helix3d(radius, pitch, turns=None, height=None, axis='Z')
 ```
+
+### Arrays and Patterns
+
+Rectilinear arrays use a single verb; dimensionality is inferred by counts:
+```python
+# 1D: nx copies spaced by sx
+feat.array(nx=2, sx=50)
+
+# 2D: nx×ny grid spaced by sx, sy
+feat.array(nx=3, sx=30, ny=2, sy=20)
+
+# 3D: nx×ny×nz lattice spaced by sx, sy, sz
+feat.array(nx=3, sx=20, ny=3, sy=20, nz=2, sz=15)
+```
+
+Signature:
+```python
+Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound', basis='world')
+```
+- include_origin: include base instance at index (0,0,0)
+- combine: 'compound' (default multi-solid) or 'fuse' (boolean union)
+- basis: 'world' (default) or 'local' (future)
+
+Notes:
+- Disjoint instances are allowed; result may be a compound until a later fuse with other geometry creates a single connected solid.
+- A radial fan/pattern will be provided separately (planned: `Feature.radial(...)`).
 
 ### Sweep orientation behavior
 - By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.

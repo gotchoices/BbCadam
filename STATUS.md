@@ -104,11 +104,10 @@
   - [ ] Implement for box/cylinder results (axis-aligned), document limitations
 
 - [ ] Array/pattern helpers
-  - [ ] Linear array: `Feature.array_linear(count, dx, dy, dz)` → multi-solid/compound Feature
-  - [ ] Grid array: `Feature.array_grid(nx, ny, sx, sy, dz=0)`
-  - [ ] Circular pattern: `Feature.array_circular(n, radius, axis='Z')`
-  - [ ] Behavior doc: arrays may be disjoint (compound) until fused; final single solid requires overlap
-  - [ ] Tests: arrays fuse correctly with a connecting base; volume sums for disjoint cases
+  - [x] API design: single rectilinear `Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound')`
+  - [ ] Implement `Feature.array(...)` (rectilinear, 1D/2D/3D by counts)
+  - [ ] Add tests: 1D/2D arrays; fuse with base to form single solid; volume checks
+  - [ ] Document radial pattern (planned `Feature.radial(...)`) for later
 
 ## Known Issues
 - [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:

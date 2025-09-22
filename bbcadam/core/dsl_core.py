@@ -95,6 +95,53 @@ class Feature:
         self.shape.rotate(App.Vector(0, 0, 0), ax, float(deg))
         return self
 
+    def array(self, nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound', basis='world'):
+        """Create a rectilinear array of this Feature's shape.
+
+        - nx, sx: count and spacing along X
+        - ny, sy: count and spacing along Y (default 1, none)
+        - nz, sz: count and spacing along Z (default 1, none)
+        - include_origin: include the original instance at (0,0,0)
+        - combine: 'compound' (default) or 'fuse'
+        - basis: 'world' (reserved for future 'local' support)
+        """
+        import Part
+        shapes = []
+        if include_origin:
+            shapes.append(self.shape.copy())
+        for ix in range(nx):
+            for iy in range(ny):
+                for iz in range(nz):
+                    if ix == 0 and iy == 0 and iz == 0 and include_origin:
+                        continue
+                    dx = float(ix) * float(sx)
+                    dy = float(iy) * float(sy)
+                    dz = float(iz) * float(sz)
+                    sh = self.shape.copy()
+                    sh.translate(App.Vector(dx, dy, dz))
+                    shapes.append(sh)
+        if not shapes:
+            return Feature(self.shape.copy())
+        if combine == 'fuse':
+            acc = shapes[0]
+            for sh in shapes[1:]:
+                try:
+                    acc = acc.fuse(sh)
+                except Exception:
+                    acc = acc.fuse(sh)
+            return Feature(acc)
+        # Default: compound of solids
+        try:
+            comp = Part.Compound(shapes)
+        except Exception:
+            comp = shapes[0]
+            for sh in shapes[1:]:
+                try:
+                    comp = comp.multiFuse([sh])
+                except Exception:
+                    comp = comp.fuse(sh)
+        return Feature(comp)
+
     def add(self):
         _commit_pending_if_any(skip_shape=self.shape)
         _apply_add(self.shape)

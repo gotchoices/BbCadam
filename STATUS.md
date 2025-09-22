@@ -103,6 +103,13 @@
   - [ ] Add simple selectors: `outside_all`, `top_edges`, `bottom_edges`, `vertical_edges`
   - [ ] Implement for box/cylinder results (axis-aligned), document limitations
 
+- [ ] Array/pattern helpers
+  - [ ] Linear array: `Feature.array_linear(count, dx, dy, dz)` → multi-solid/compound Feature
+  - [ ] Grid array: `Feature.array_grid(nx, ny, sx, sy, dz=0)`
+  - [ ] Circular pattern: `Feature.array_circular(n, radius, axis='Z')`
+  - [ ] Behavior doc: arrays may be disjoint (compound) until fused; final single solid requires overlap
+  - [ ] Tests: arrays fuse correctly with a connecting base; volume sums for disjoint cases
+
 ## Known Issues
 - [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:
   - Avoiding opening part documents during assembly linking (load shapes directly without activating docs), or
@@ -160,6 +167,22 @@
 - [ ] arc3d center+sweep segment: include an arc3d in the path and sweep
 - [ ] spline3d path + sweep
 - [ ] Sweep orientation: default (auto) aligns +Z to path start tangent; validate bbox/volume plausibility
+
+#### Profile 2D arcs coverage (parity with sketch)
+- [x] center + sweep (end inferred): quarter arc
+- [x] center + radius + sweep: quarter arc
+- [x] radius + end + sweep: explicit degrees
+- [x] radius + end + dir: minor arc
+- [x] Plane variant: `plane='XZ'`
+- [ ] Plane variant: `plane='YZ'`
+- [x] Error paths: bad radius vs chord, start==end, full-circle via arc() rejected
+
+#### Profile (3D) Groundwork (implemented)
+- [x] Add `profile(...)` facade replacing `section` in public DSL
+- [x] Add `on(plane, origin=...)` minimal plane setter
+- [ ] (Deferred) `to3d(x,y,z)` API — implement after core profile functions are complete
+- [ ] (Deferred) Rough-in `arc3d`, `spline3d`, `helix3d` — implement after 2D profile tests
+- [ ] Do NOT overload `to(x,y,z)` yet (deferred; avoid frame ambiguity)
 
 #### Additional DSL coverage before refactor (Phase 2)
 - [ ] cylinder base test (d/r,h) and transforms (`.at()`, `.rotate()`)

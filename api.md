@@ -71,6 +71,7 @@ Feature.at((x,y,z))
 Feature.translate((x,y,z))
 Feature.rotate(axis=(1,0,0), deg=0)
 Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound', basis='world')
+Feature.radial(n, radius, axis='Z', start_deg=0, sweep_deg=360, include_origin=True, orient='none'|'outward'|'tangent', combine='compound')
 Feature.add()      # fuse into current solid (implicit if omitted)
 Feature.cut()      # subtract from current solid
 Feature.opacity(0..100)     # set transparency (0 opaque .. 100 fully transparent) on final object
@@ -271,7 +272,8 @@ Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='comp
 
 Notes:
 - Disjoint instances are allowed; result may be a compound until a later fuse with other geometry creates a single connected solid.
-- A radial fan/pattern will be provided separately (planned: `Feature.radial(...)`).
+- Polar patterns:
+  - radial(n, radius, ...) creates instances on a circle; orient='tangent' rotates each to face along tangent; 'outward' faces radial.
 
 ### Sweep orientation behavior
 - By default, the profile is placed at the path start and auto-aligned so its local +Z is along the path tangent at the start. This keeps sweeps intuitive without pre-rotating the profile.

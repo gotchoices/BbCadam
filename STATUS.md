@@ -105,9 +105,10 @@
 
 - [ ] Array/pattern helpers
   - [x] API design: single rectilinear `Feature.array(nx, sx, ny=1, sy=0, nz=1, sz=0, include_origin=True, combine='compound')`
-  - [ ] Implement `Feature.array(...)` (rectilinear, 1D/2D/3D by counts)
-  - [ ] Add tests: 1D/2D arrays; fuse with base to form single solid; volume checks
-  - [ ] Document radial pattern (planned `Feature.radial(...)`) for later
+  - [x] Implement `Feature.array(...)` (rectilinear, 1D/2D/3D by counts)
+  - [x] Add tests: 1D/2D/3D arrays; volume and bbox checks
+  - [x] Implement `Feature.radial(...)` and document API
+  - [x] Add radial test: 6 posts around Z; volume and bbox checks
 
 ## Known Issues
 - [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:

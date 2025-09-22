@@ -129,7 +129,9 @@ class Feature:
                     acc = acc.fuse(sh)
                 except Exception:
                     acc = acc.fuse(sh)
-            return Feature(acc)
+            feat = Feature(acc)
+            _STATE['pending_feature'] = None
+            return feat
         # Default: compound of solids
         try:
             comp = Part.Compound(shapes)
@@ -140,7 +142,81 @@ class Feature:
                     comp = comp.multiFuse([sh])
                 except Exception:
                     comp = comp.fuse(sh)
-        return Feature(comp)
+        feat = Feature(comp)
+        _STATE['pending_feature'] = None
+        return feat
+
+    def radial(self, n, radius, axis='Z', start_deg=0.0, sweep_deg=360.0, include_origin=True, orient='none', combine='compound'):
+        """Create a radial (polar) pattern of this Feature's shape.
+
+        - n: number of instances
+        - radius: circle radius
+        - axis: 'X'|'Y'|'Z' (circle lies in plane perpendicular to axis)
+        - start_deg: starting angle in degrees
+        - sweep_deg: total sweep angle in degrees (default full circle)
+        - include_origin: include instance at start angle
+        - orient: 'none' (no reorientation), 'outward' (rotate with radius), 'tangent' (rotate +90°)
+        - combine: 'compound' (default) or 'fuse'
+        """
+        import math, Part
+        if int(n) <= 0:
+            return Feature(self.shape.copy())
+        axis_u = str(axis).upper()
+        if axis_u == 'Z':
+            axis_vec = App.Vector(0, 0, 1)
+            def pos(a):
+                return App.Vector(radius * math.cos(a), radius * math.sin(a), 0.0)
+        elif axis_u == 'X':
+            axis_vec = App.Vector(1, 0, 0)
+            def pos(a):
+                return App.Vector(0.0, radius * math.cos(a), radius * math.sin(a))
+        elif axis_u == 'Y':
+            axis_vec = App.Vector(0, 1, 0)
+            def pos(a):
+                return App.Vector(radius * math.cos(a), 0.0, radius * math.sin(a))
+        else:
+            raise ValueError("axis must be 'X','Y', or 'Z'")
+
+        shapes = []
+        step = float(sweep_deg) / float(n) if n > 0 else 0.0
+        for i in range(int(n)):
+            ang_deg = float(start_deg) + i * step
+            ang_rad = math.radians(ang_deg)
+            sh = self.shape.copy()
+            # Orientation around axis (before translate)
+            if orient and orient != 'none':
+                rot_deg = ang_deg + (90.0 if orient == 'tangent' else 0.0)
+                sh.rotate(App.Vector(0, 0, 0), axis_vec, rot_deg)
+            # Position
+            p = pos(ang_rad)
+            sh.translate(p)
+            # include_origin gate handled by skipping i==0 if needed
+            if include_origin or i != 0:
+                shapes.append(sh)
+        if not shapes:
+            return Feature(self.shape.copy())
+        if combine == 'fuse':
+            acc = shapes[0]
+            for sh in shapes[1:]:
+                try:
+                    acc = acc.fuse(sh)
+                except Exception:
+                    acc = acc.fuse(sh)
+            feat = Feature(acc)
+            _STATE['pending_feature'] = None
+            return feat
+        try:
+            comp = Part.Compound(shapes)
+        except Exception:
+            comp = shapes[0]
+            for sh in shapes[1:]:
+                try:
+                    comp = comp.multiFuse([sh])
+                except Exception:
+                    comp = comp.fuse(sh)
+        feat = Feature(comp)
+        _STATE['pending_feature'] = None
+        return feat
 
     def add(self):
         _commit_pending_if_any(skip_shape=self.shape)

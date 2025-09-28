@@ -48,6 +48,7 @@
   - [ ] docs/installation.md
   - [ ] docs/api.md (updated)
   - [ ] docs/examples.md
+  - [ ] docs/logging.md (logging facility: env vars BB_LOG, BB_LOG_TAGS, BB_LOG_FILE; examples)
 - [ ] Update README.md for standalone package
 - [ ] Add docstrings to all public APIs
 - [ ] Create example CAD scripts using shebang wrapper
@@ -61,6 +62,7 @@
 - [ ] Test installation via pip install -e .
 - [ ] Test CLI commands work after installation
 - [ ] Test shebang wrapper with example scripts
+ - [ ] Add logging facility tests: env-configured enable/disable, tag filtering, file output vs console, headless behavior
 - [ ] Create GitHub Actions for CI/CD
 - [ ] Test cross-platform compatibility (macOS, Linux, Windows)
 
@@ -109,6 +111,8 @@
   - [x] Add tests: 1D/2D/3D arrays; volume and bbox checks
   - [x] Implement `Feature.radial(...)` and document API
   - [x] Add radial test: 6 posts around Z; volume and bbox checks
+  - [ ] Array local-basis support: `basis='local'` — step vectors in feature's local frame (Placement); implement and add tests using rotated source features (verify bbox/positions)
+  - [ ] Radial orientation options: `orient={'none','tangent','outward'}` — control instance orientation around axis; implement transforms and add tests (bbox/orientation plausibility)
 
 ## Known Issues
 - [ ] Assembly watcher focus/view: When rebuilding an assembly, FreeCAD can still switch active doc (e.g., to a part) and alter the assembly viewpoint. We mitigated part rebuilds by reusing the part document and delaying view restore, but assembly-level focus flips persist. Proper fix likely requires:
@@ -176,6 +180,7 @@
 - [x] Plane variant: `plane='XZ'`
 - [ ] Plane variant: `plane='YZ'`
 - [x] Error paths: bad radius vs chord, start==end, full-circle via arc() rejected
+ - [ ] Document/integrate per-op `plane=` override behavior in 2D profile ops (spec)
 
 #### Profile (3D) Groundwork (implemented)
 - [x] Add `profile(...)` facade replacing `section` in public DSL
@@ -183,6 +188,8 @@
 - [ ] (Deferred) `to3d(x,y,z)` API — implement after core profile functions are complete
 - [ ] (Deferred) Rough-in `arc3d`, `spline3d`, `helix3d` — implement after 2D profile tests
 - [ ] Do NOT overload `to(x,y,z)` yet (deferred; avoid frame ambiguity)
+ - [ ] Extend `profile.on(...)` with advanced args: `normal`, `x_axis`, `rotate`, `translate`, `inherit`; implement placement composition and add tests (plane switching mid-chain)
+ - [ ] Per-op plane override: support `plane=` on `to/go/arc`; implement ephemeral override that does not affect current plane; add tests
 
 #### Additional DSL coverage before refactor (Phase 2)
 - [ ] cylinder base test (d/r,h) and transforms (`.at()`, `.rotate()`)

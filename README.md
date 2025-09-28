@@ -10,7 +10,7 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
 - Encourage stable modeling practices (datum/LCS, named references) to reduce topological breakage.
 
 ## What BbCadam provides
-- **Two script formats**: Abbreviated format (kwave-style) and full Python format
+- **Two script formats**: Abbreviated format and full Python format
 - **CLI tools**: `bbcadam-build`, `bbcadam-py`, `bbcadam-launch`, `bbcadam-dump`
 - **Part/assembly authoring** with context (`ctx`) including document, params, units, paths, and logging
 - **A small fluent Python DSL**:
@@ -39,9 +39,72 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
 - Document units, coordinate frames, and conventions.
 - Optional (phase 2): dependency graph (parts→assemblies) for impacted rebuilds.
 
+## Installation (from GitHub)
+
+Clone and install in editable mode (recommended for development):
+
+```bash
+git clone https://github.com/gotchoices/BbCadam.git
+cd BbCadam
+python -m venv .venv && source .venv/bin/activate  # optional but recommended
+pip install -U pip
+pip install -e .
+```
+
+Prerequisites:
+
+- Python 3.10+
+- FreeCAD installed. CLI detection prefers `FreeCADCmd` on PATH; otherwise set `FREECAD_PATH` or `BB_FREECAD` to the FreeCAD installation directory.
+
+Verify install:
+
+```bash
+bbcadam-build --help | head -n 5
+bbcadam-launch --help | head -n 5
+bbcadam-py --help | head -n 5
+```
+
+## Quick Start: Author parts in your own repo
+
+Typical structure in a separate project (e.g., `myproj/`):
+
+```
+myproj/
+  specs/
+    parts/<name>/<name>.py           # defines build_part(ctx)
+    assemblies/<name>/<name>.py      # defines build_assembly(ctx)
+  build/{parts,assemblies}/          # generated
+  exports/{step,stl}/{parts,assemblies}/
+```
+
+Create the structure and your first part:
+
+```bash
+mkdir -p myproj/{specs/parts/demo,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
+cat > myproj/specs/parts/demo/demo.py <<'PY'
+def build_part(ctx):
+    from bbcadam import box
+    box(10, 20, 5).add()
+PY
+```
+
+Build headless:
+
+```bash
+bbcadam-build myproj/specs/parts/demo/demo.py --export step stl
+```
+
+Launch FreeCAD + watcher (rebuilds on save):
+
+```bash
+bbcadam-launch --project myproj
+```
+
+See `api.md` for the DSL authoring guide.
+
 ## Script Formats
 
-### Abbreviated Format (kwave-style)
+### Abbreviated Format
 ```python
 def build_part(ctx):
     # Parameters
@@ -66,9 +129,9 @@ bbcadam.export_stl(box, "output.stl")
 **Usage**: `bbcadam-py myscript.py` or `./myscript.py`
 
 ## Usage (conceptual)
-Project structure in a dependent repo (e.g., `kwave/`):
+Project structure in a dependent repo (e.g., `myproj/`):
 ```
-kwave/
+myproj/
   specs/
     parts/<name>/<name>.py           # defines build_part(ctx)
     assemblies/<name>/<name>.py      # defines build_assembly(ctx)
@@ -79,10 +142,10 @@ kwave/
 Run the GUI watcher via launcher, or build headless with the wrappers:
 ```bash
 # GUI + watcher (auto-detects FreeCAD):
-bash BbCadam/tools/launch_freecad_with_watcher.sh --project kwave
+bbcadam-launch --project myproj
 
-# Abbreviated format (kwave-style):
-bbcadam-build kwave/specs/parts/lagoon/lagoon.py
+# Abbreviated format:
+bbcadam-build myproj/specs/parts/lagoon/lagoon.py
 
 # Full Python format:
 bbcadam-py myscript.py
@@ -91,7 +154,7 @@ bbcadam-py myscript.py
 bbcadam-launch
 
 # Debug dump (JSON bbox/faces/edges/volume):
-bbcadam-dump kwave/specs/parts/lagoon/lagoon.py
+bbcadam-dump myproj/specs/parts/lagoon/lagoon.py
 ```
 
 See `api.md` for the DSL and authoring guide, including arc input validation rules and the `sketch(visible=...)` flag.
@@ -109,20 +172,20 @@ See `api.md` for the DSL and authoring guide, including arc input validation rul
 - Use `BbCadam/tools/install_generated_py.sh` (Bash) to install generated scripts safely.
 
 ## Scaffolding a project (for humans or AI agents)
-From an empty project folder (e.g., `kwave/`):
+From an empty project folder (e.g., `myproj/`):
 ```bash
-mkdir -p kwave/{config,specs/parts/caisson,specs/assemblies,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
-cat > kwave/config/settings.yaml <<'YAML'
+mkdir -p myproj/{config,specs/parts/caisson,specs/assemblies,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
+cat > myproj/config/settings.yaml <<'YAML'
 units: in
 exports: { step: true, stl: true }
 YAML
-cat > kwave/specs/parts/caisson/caisson.md <<'MD'
+cat > myproj/specs/parts/caisson/caisson.md <<'MD'
 # model: caisson
 # generated_from: caisson.md
 # md_hash: <fill>
 # status: draft
 MD
-cat > kwave/specs/parts/caisson/caisson.py <<'PY'
+cat > myproj/specs/parts/caisson/caisson.py <<'PY'
 def build_part(ctx):
   # placeholder script; replace via AI or edit manually
   box(size=(10,10,10)).add()
@@ -131,7 +194,7 @@ PY
 
 To install a newly generated part script without clobbering human-owned files:
 ```bash
-bash BbCadam/tools/install_generated_py.sh /tmp/caisson.generated.py kwave/specs/parts/caisson/caisson.py
+bash BbCadam/tools/install_generated_py.sh /tmp/caisson.generated.py myproj/specs/parts/caisson/caisson.py
 ```
 
 To launch the watcher from inside the project folder:

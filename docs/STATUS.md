@@ -30,15 +30,15 @@
   - [x] bbcadam/backends/sketcher.py (SketcherSectionBackend)
 - [x] Update all imports to use new module structure
 - [x] Create bbcadam/__init__.py to re-export public API
-- [ ] Move watcher/ to bbcadam/watcher/
+- [x] Move watcher/ to bbcadam/watcher/ (implemented as bbcadam/watcher.py)
 - [x] Update builder.py to use new module structure
 - [x] Replace public DSL export of `section` with `profile`
 
 ### Phase 3: CLI Integration
-- [ ] Implement bbcadam/cli/launch.py (bbcadam-launch command)
-- [ ] Implement bbcadam/cli/build.py (bbcadam-build command for abbreviated format)
-- [ ] Implement bbcadam/cli/py_runner.py (bbcadam-py command for full Python format)
-- [ ] Implement bbcadam/cli/dump.py (bbcadam-dump command)
+- [x] Implement bbcadam/cli/launch.py (bbcadam-launch command)
+- [x] Implement bbcadam/cli/build.py (bbcadam-build command for abbreviated format)
+- [x] Implement bbcadam/cli/py_runner.py (bbcadam-py command for full Python format)
+- [x] Implement bbcadam/cli/dump.py (bbcadam-dump command)
 - [ ] Test CLI entry points work after pip install
 - [ ] Test both script formats work correctly
 
@@ -131,7 +131,7 @@
 - [x] Refactor `api.py` into `bbcadam/core/*` and `bbcadam/backends/*` per Phase 2 (api.py now reference-only)
 - [x] Re-run DSL regression tests and fix any breakages (no functional regressions)
 - [x] Rename `section` → `profile` in public DSL and docs
-- [ ] Migrate `section` → `profile` after tests are green; add profile tests
+- [x] Migrate `section` → `profile` after tests are green; add profile tests
 
 ### DSL Regression Test Checklist (excluding `section`/`profile`)
  - [x] box: create 10×20×30, assert volume=6000, bbox, face/edge/vertex counts
@@ -228,21 +228,16 @@
 - [x] Remove `scripts/find_freecad.sh` (logic incorporated into CLI detection)
 - [x] Remove `watcher/` package-local directory (watching now handled via user project + CLI)
 - [x] Remove `tools/` directory (all functionality migrated to `bbcadam/cli/` modules)
-- [ ] Remove `bbcadam/api.py` after `section` → `profile` enhancements and associated tests are green
+- [x] Remove `bbcadam/api.py` after `section` → `profile` enhancements and associated tests are green
 
 ## Watcher Migration (port from legacy `watcher/watch_specs.py`)
-- [ ] Recreate watcher as `bbcadam.watcher` (library) invoked by `bbcadam-launch`
-- [ ] Env-config: honor `BB_PROJECT_ROOT`, `BB_WATCH_DIR`, `BB_BUILD_DIR`
-- [ ] Directory scope:
-  - If `specs/` exists, watch `specs/parts` and `specs/assemblies`
-  - Else watch `BB_WATCH_DIR` (or project root)
-- [ ] File types: watch `.py`, `.yaml`, `.yml`; recursive
-- [ ] Debounce: coalesce rapid changes (≈250ms) before rebuild
-- [ ] Rebuild rules:
-  - Under `specs/parts/<part>/`: prefer `<part>.py`, else first `.py`
-  - Under `specs/assemblies/<asm>/`: prefer `<asm>.py`, else first `.py`
-  - Else (cwd mode): infer part vs assembly from parent folder name
-- [ ] Execute rebuilds headless via `FreeCADCmd` (CLI fallback if GUI absent)
-- [ ] (Later) GUI niceties: active doc + camera restore for assembly rebuilds
+- [x] Recreate watcher as `bbcadam.watcher` (library) invoked by `bbcadam-launch`
+- [x] Env-config: honor `BB_PROJECT_ROOT`, `BB_WATCH_DIR`, `BB_BUILD_DIR`
+- [x] Directory scope: watch `specs/` if exists, else project root (simplified from original spec)
+- [x] File types: watch `.py`, `.yaml`, `.yml`; recursive
+- [x] Debounce: coalesce rapid changes (250ms) before rebuild
+- [x] Rebuild rules: prefer `<name>.py`, else first `.py`; classify by `build_part`/`build_assembly` function detection
+- [x] Execute rebuilds via `build_part_script`/`build_assembly_script` (uses FreeCAD API directly, not CLI)
+- [x] GUI integration: runs inside FreeCAD using `QFileSystemWatcher`
 - [ ] Tests: simulate file changes; assert calls to build functions; debounce works
 

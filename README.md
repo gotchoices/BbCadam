@@ -1,6 +1,6 @@
 # BbCadam — Scripted CAD Framework for FreeCAD
 
-BbCadam is a lightweight framework that lets you author parts and assemblies as Python scripts using a small, consistent DSL. It includes a GUI watcher for live rebuilds and a headless builder for CI/batch.
+BbCadam (Big-boy Computer Aided Design and Manufacturing) is a lightweight framework that lets you author parts and assemblies as Python scripts using a small, consistent DSL (Domain-Specific Language). It includes a GUI watcher for live rebuilds and a headless builder for CI/batch.
 
 This concept was originally designed using Sketchup/Ruby (before Google stopped not being evil).  FreeCad was not feasible back then.  Today, functional FreeCad and AI make a rebirth of BbCad possible!
 
@@ -18,7 +18,7 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
   - `Feature.translate(...).rotate(...).add()/cut()`
   - `lcs(name, at, rot_xyz_deg)` (alias `add_lcs`)
   - Implicit add and end-of-build flush of pending features
-  - Sections/Sketches: `section(...)` for Part-based profiles; `sketch(..., visible=True|False)` to materialize a Sketcher object for inspection
+  - Profiles/Sketches: `profile(...)` for Part-based 2D/3D profiles; `sketch(..., visible=True|False)` to materialize a Sketcher object for inspection
   - Assemblies: `component(path, as_name).at(...).rot_xyz_deg(...)`
   - Exports: `export()` resolves via param/settings or `export(['step','stl'])`
 - GUI watcher macro that rebuilds on file save and exports STEP/STL (configurable).
@@ -29,94 +29,91 @@ This concept was originally designed using Sketchup/Ruby (before Google stopped 
 - The DSL is auto-exposed to part/assembly scripts. Raw FreeCAD access requires explicit imports (e.g., `import FreeCAD as App, Part`).
 - Escapes are allowed and logged; CI can optionally warn.
 
-## Project checklist (for BbCadam)
-- Define API and `ctx` shape (see `api.md`).
-- Implement shared builder core invoked by both watcher and headless tools.
-- Implement watcher (Qt `QFileSystemWatcher`), debounce, and document lifecycle.
-- Implement exports (STEP/STL) with consistent paths and settings.
-- Provide templates and examples for parts and assemblies.
-- Provide logging and minimal diagnostics.
-- Document units, coordinate frames, and conventions.
-- Optional (phase 2): dependency graph (parts→assemblies) for impacted rebuilds.
+## Installation
 
-## Installation (from GitHub)
-
-Clone and install in editable mode (recommended for development):
-
+**From GitHub (recommended):**
 ```bash
-git clone https://github.com/gotchoices/BbCadam.git
-cd BbCadam
-python -m venv .venv && source .venv/bin/activate  # optional but recommended
-pip install -U pip
-pip install -e .
+pip install git+https://github.com/gotchoices/BbCadam.git
 ```
 
-Prerequisites:
+**From PyPI (may be available in future):**
+```bash
+pip install bbcadam  # Not yet published
+```
 
+**Prerequisites:**
 - Python 3.10+
-- FreeCAD installed. CLI detection prefers `FreeCADCmd` on PATH; otherwise set `FREECAD_PATH` or `BB_FREECAD` to the FreeCAD installation directory.
+- FreeCAD installed and available as `FreeCADCmd` on PATH, or set `FREECAD_PATH`/`BB_FREECAD` environment variable
 
-Verify install:
+**Verify installation:**
+```bash
+bbcadam-build --help
+bbcadam-launch --help
+```
+
+## Quick Start
+
+Create a new CAD project:
 
 ```bash
-bbcadam-build --help | head -n 5
-bbcadam-launch --help | head -n 5
-bbcadam-py --help | head -n 5
-```
+mkdir myproject && cd myproject
+python -m venv .venv && source .venv/bin/activate
+pip install git+https://github.com/gotchoices/BbCadam.git
 
-## Quick Start: Author parts in your own repo
+# Create project structure
+mkdir -p specs/parts/demo build exports/{step,stl}/{parts,assemblies}
 
-Typical structure in a separate project (e.g., `myproj/`):
-
-```
-myproj/
-  specs/
-    parts/<name>/<name>.py           # defines build_part(ctx)
-    assemblies/<name>/<name>.py      # defines build_assembly(ctx)
-  build/{parts,assemblies}/          # generated
-  exports/{step,stl}/{parts,assemblies}/
-```
-
-Create the structure and your first part:
-
-```bash
-mkdir -p myproj/{specs/parts/demo,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
-cat > myproj/specs/parts/demo/demo.py <<'PY'
+# Create your first part
+cat > specs/parts/demo/demo.py <<'EOF'
 def build_part(ctx):
-    from bbcadam import box
     box(10, 20, 5).add()
-PY
+EOF
+
+# Build it
+bbcadam-build specs/parts/demo/demo.py --export step stl
+
+# Launch FreeCAD with watcher (rebuilds on save)
+bbcadam-launch --project .
 ```
 
-Build headless:
+## Project Structure
 
-```bash
-bbcadam-build myproj/specs/parts/demo/demo.py --export step stl
+BbCadam expects this directory layout in your CAD projects:
+
 ```
-
-Launch FreeCAD + watcher (rebuilds on save):
-
-```bash
-bbcadam-launch --project myproj
+myproject/
+├── specs/
+│   ├── parts/<name>/<name>.py           # Part scripts
+│   └── assemblies/<name>/<name>.py      # Assembly scripts
+├── build/{parts,assemblies}/            # Generated FreeCAD files
+└── exports/{step,stl}/{parts,assemblies}/  # Exported files
 ```
-
-See `api.md` for the DSL authoring guide.
 
 ## Script Formats
 
-### Abbreviated Format
+### Abbreviated Format (Recommended)
+
+Define a `build_part(ctx)` or `build_assembly(ctx)` function:
+
 ```python
 def build_part(ctx):
-    # Parameters
-    radius = param('radius', 10)
+    # Parameters from params.yaml or defaults
+    width = param('width', 10)
+    height = param('height', 20)
     
-    # Create part using DSL
-    box = box(radius, radius, radius)
+    # Create geometry using DSL
+    box(width, height, 5).add()
+    
+    # Export (optional - can be done via CLI)
+    export(['step', 'stl'])
 ```
 
-**Usage**: `bbcadam-build mypart.py`
+**Usage:** `bbcadam-build mypart.py`
 
-### Full Python Format (standalone)
+### Full Python Format (Standalone)
+
+For standalone scripts with shebang:
+
 ```python
 #!/usr/bin/env bbcadam-py
 import bbcadam
@@ -126,81 +123,66 @@ box = bbcadam.box(10, 10, 10)
 bbcadam.export_stl(box, "output.stl")
 ```
 
-**Usage**: `bbcadam-py myscript.py` or `./myscript.py`
+**Usage:** `bbcadam-py myscript.py` or `./myscript.py`
 
-## Usage (conceptual)
-Project structure in a dependent repo (e.g., `myproj/`):
-```
-myproj/
-  specs/
-    parts/<name>/<name>.py           # defines build_part(ctx)
-    assemblies/<name>/<name>.py      # defines build_assembly(ctx)
-  build/{parts,assemblies}/          # generated
-  exports/{step,stl}/{parts,assemblies}/
-```
+## DSL Overview
 
-Run the GUI watcher via launcher, or build headless with the wrappers:
-```bash
-# GUI + watcher (auto-detects FreeCAD):
-bbcadam-launch --project myproj
+BbCadam provides a fluent Python DSL for common CAD operations:
 
-# Abbreviated format:
-bbcadam-build myproj/specs/parts/lagoon/lagoon.py
+- **Primitives:** `box(w,h,d)`, `cylinder(r,h)` or `cylinder(d=10,h=20)`
+- **Transforms:** `.at(x,y,z)`, `.rotate(x,y,z)`, `.translate(x,y,z)`
+- **Boolean ops:** `.add()`, `.cut()`, feature chaining with `feature().box().cylinder().add()`
+- **2D Profiles:** `profile()` for sketching and padding/revolving/sweeping
+- **Arrays:** `Feature.array(nx,sx,ny,sy)`, `Feature.radial(n,radius)`
+- **Assemblies:** `component(path).at(...).rotate(...)`
+- **Exports:** `export(['step','stl'])` or individual `export_step()`, `export_stl()`
 
-# Full Python format:
-bbcadam-py myscript.py
+## CLI Tools
 
-# Interactive development:
-bbcadam-launch
+- **`bbcadam-build`** - Build single part/assembly (abbreviated format)
+- **`bbcadam-py`** - Run standalone Python scripts (full format)  
+- **`bbcadam-launch`** - Launch FreeCAD with file watcher for live rebuilds
+- **`bbcadam-dump`** - Export part geometry as JSON for debugging
 
-# Debug dump (JSON bbox/faces/edges/volume):
-bbcadam-dump myproj/specs/parts/lagoon/lagoon.py
-```
+## Examples
 
-See `api.md` for the DSL and authoring guide, including arc input validation rules and the `sketch(visible=...)` flag.
-
-## AI → Python promotion policy (guardrails)
-- Generated scripts should include a header at the top:
-  - `# model: <name>`
-  - `# generated_from: <file.md>`
-  - `# md_hash: <sha256>`
-  - `# status: draft|frozen`
-- Overwrite rules for installing generated files:
-  - If target .py does not exist → install.
-  - If header exists and `status: draft` → overwrite allowed.
-  - Otherwise → do not overwrite; write `<name>.ai.py` alongside and exit non-zero.
-- Use `BbCadam/tools/install_generated_py.sh` (Bash) to install generated scripts safely.
-
-## Scaffolding a project (for humans or AI agents)
-From an empty project folder (e.g., `myproj/`):
-```bash
-mkdir -p myproj/{config,specs/parts/caisson,specs/assemblies,build/{parts,assemblies},exports/{step,stl}/{parts,assemblies}}
-cat > myproj/config/settings.yaml <<'YAML'
-units: in
-exports: { step: true, stl: true }
-YAML
-cat > myproj/specs/parts/caisson/caisson.md <<'MD'
-# model: caisson
-# generated_from: caisson.md
-# md_hash: <fill>
-# status: draft
-MD
-cat > myproj/specs/parts/caisson/caisson.py <<'PY'
+**Simple box:**
+```python
 def build_part(ctx):
-  # placeholder script; replace via AI or edit manually
-  box(size=(10,10,10)).add()
-PY
+    box(10, 20, 30).add()
 ```
 
-To install a newly generated part script without clobbering human-owned files:
-```bash
-bash BbCadam/tools/install_generated_py.sh /tmp/caisson.generated.py myproj/specs/parts/caisson/caisson.py
+**Parametric cylinder:**
+```python
+def build_part(ctx):
+    diameter = param('diameter', 25.4)  # Default 1 inch
+    height = param('height', 50)
+    
+    cylinder(d=diameter, h=height).add()
 ```
 
-To launch the watcher from inside the project folder:
-```bash
-bash ../BbCadam/tools/launch_freecad_with_watcher.sh
+**2D profile with padding:**
+```python
+def build_part(ctx):
+    profile().rectangle(50, 30).pad(10)
 ```
 
+**Boolean operations:**
+```python
+def build_part(ctx):
+    # Create base box
+    box(20, 20, 10).add()
+    
+    # Cut hole
+    cylinder(d=5, h=15).at(10, 10, -2).cut()
+```
 
+## Documentation
 
+- **[API Reference](docs/api.md)** - Complete DSL documentation
+- **[Profile Guide](docs/profile.md)** - 2D sketching and 3D operations  
+- **[Development Guide](docs/development.md)** - Contributing to BbCadam
+
+## License
+
+MIT License - see LICENSE file for details.

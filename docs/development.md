@@ -51,6 +51,8 @@ The `-e` flag creates a live link, so changes to BbCadam source immediately affe
 3. Test with real project: `cd myproject && source .venv/bin/activate && bbcadam-build ...`
 4. Iterate between steps 1-3 until satisfied
 
+**Note:** Use `deactivate` to exit any active venv before switching environments.
+
 ## Running Tests
 
 ```bash

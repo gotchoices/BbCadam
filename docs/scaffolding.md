@@ -93,6 +93,39 @@ bbcadam-launch --project .
 bbcadam-dump specs/parts/demo/demo.py
 ```
 
+### Debug Dump (`bbcadam-dump`)
+
+The dump command extracts geometry metadata for debugging and test development:
+
+```bash
+bbcadam-dump specs/parts/demo/demo.py
+# Creates: build/debug/demo.json
+```
+
+**Output includes:**
+- **Bounding box** (xMin/Max, yMin/Max, zMin/Max) for size verification
+- **Topology counts** (solids, faces, edges, vertices) for complexity analysis  
+- **Volume/area** for mass property validation
+- **Object names/labels** for identification
+
+**Example JSON:**
+```json
+{
+  "name": "Box",
+  "label": "Box", 
+  "bbox": {"xMin": 0, "xMax": 10, "yMin": 0, "yMax": 20, "zMin": 0, "zMax": 5},
+  "numSolids": 1, "numFaces": 6, "numEdges": 12,
+  "volume": 1000.0, "area": 700.0
+}
+```
+
+**When to use:**
+- **Test development**: Get expected values for assertions
+- **Debugging**: Verify geometry matches expectations  
+- **Regression testing**: Detect unintended changes
+
+**vs `--export json`**: Dump analyzes *completed* geometry post-build, while export JSON happens during the build process.
+
 ## Directory Structure Reference
 
 ```

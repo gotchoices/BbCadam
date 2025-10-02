@@ -4,6 +4,7 @@
 
 - **[API Reference](api.md)** - Complete DSL reference and examples
 - **[Profile Guide](profile.md)** - 2D sketching, arcs, padding, revolving, sweeping
+- **[Scaffolding Guide](scaffolding.md)** - Complete project setup and configuration
 - **[Sketch Guide](sketch.md)** - Legacy sketch documentation
 
 ## Development Documentation

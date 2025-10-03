@@ -262,17 +262,29 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                 except Exception:
                     pass
             if fc.exists():
+                # Prefer already-open document to avoid focus steal
                 try:
-                    target_doc = App.openDocument(str(fc))
+                    target_doc = App.getDocument(fc.stem)
                 except Exception:
+                    target_doc = None
+                if target_doc is None:
                     try:
-                        target_doc = App.getDocument(fc.stem)
+                        target_doc = App.getDocument(f'part__{part_name}')
                     except Exception:
                         target_doc = None
-                # Re-activate the assembly doc to keep focus
+                if target_doc is None:
+                    try:
+                        target_doc = App.openDocument(str(fc))
+                    except Exception:
+                        target_doc = None
+                # Ensure assembly regains focus on next tick
                 try:
                     import FreeCADGui as Gui  # type: ignore
-                    Gui.activateDocument(doc_name)
+                    try:
+                        from PySide6.QtCore import QTimer
+                    except Exception:
+                        from PySide2.QtCore import QTimer  # type: ignore
+                    QTimer.singleShot(0, lambda: App.setActiveDocument(doc_name))
                 except Exception:
                     pass
                 if target_doc:
@@ -297,17 +309,24 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                 alt = ctx.paths.build_parts / (p.stem + '.FCStd')
                 if alt.exists():
                     p = alt
+            # Prefer already-open document to avoid focus steal
             try:
-                target_doc = App.openDocument(str(p))
+                target_doc = App.getDocument(p.stem)
             except Exception:
+                target_doc = None
+            if target_doc is None:
                 try:
-                    target_doc = App.getDocument(p.stem)
+                    target_doc = App.openDocument(str(p))
                 except Exception:
                     target_doc = None
-            # Re-activate the assembly doc to keep focus
+            # Ensure assembly regains focus on next tick
             try:
                 import FreeCADGui as Gui  # type: ignore
-                Gui.activateDocument(doc_name)
+                try:
+                    from PySide6.QtCore import QTimer
+                except Exception:
+                    from PySide2.QtCore import QTimer  # type: ignore
+                QTimer.singleShot(0, lambda: App.setActiveDocument(doc_name))
             except Exception:
                 pass
             if target_doc:
@@ -412,10 +431,6 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                         App.setActiveDocument(orig_doc_name)
                     except Exception:
                         pass
-                    try:
-                        Gui.activateDocument(orig_doc_name)
-                    except Exception:
-                        pass
                 # If we captured a prior camera, restore it
                 if orig_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
                     try:
@@ -426,7 +441,7 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                     # For assemblies we always fit on first creation of asm doc in session
                     # Detect first creation by checking if the doc has exactly 0 or 1 objects pre-link
                     try:
-                        Gui.activateDocument(doc.Name)
+                        App.setActiveDocument(doc.Name)
                     except Exception:
                         pass
                     v = None

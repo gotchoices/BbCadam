@@ -161,11 +161,25 @@ class _GuiWatcher:
         prev_known = set(self.known_files)
         self._rescan()
         # Initialize mtimes for any newly discovered files
-        for p in self.known_files - prev_known:
+        new_files = self.known_files - prev_known
+        for p in new_files:
             try:
                 self.mtimes[p] = os.path.getmtime(p)
             except Exception:
                 self.mtimes.pop(p, None)
+        # Queue rebuilds for newly discovered controller files immediately
+        for p in new_files:
+            try:
+                pp = Path(p)
+                target = None
+                if pp.suffix.lower() == ".py":
+                    target = pp
+                elif pp.suffix.lower() in {".yaml", ".yml"}:
+                    target = _find_controller_script(pp)
+                if target and target.exists():
+                    self._queue(target)
+            except Exception:
+                pass
         # Detect changes on existing files
         for p in list(self.known_files & prev_known):
             try:
@@ -184,11 +198,25 @@ class _GuiWatcher:
         prev_known = set(self.known_files)
         self._rescan()
         # Initialize mtimes for new files
-        for p in self.known_files - prev_known:
+        new_files = self.known_files - prev_known
+        for p in new_files:
             try:
                 self.mtimes[p] = os.path.getmtime(p)
             except Exception:
                 self.mtimes.pop(p, None)
+        # Queue rebuilds for newly discovered controller files on dir change
+        for p in new_files:
+            try:
+                pp = Path(p)
+                target = None
+                if pp.suffix.lower() == ".py":
+                    target = pp
+                elif pp.suffix.lower() in {".yaml", ".yml"}:
+                    target = _find_controller_script(pp)
+                if target and target.exists():
+                    self._queue(target)
+            except Exception:
+                pass
         # Detect changes for existing files
         for p in self.known_files & prev_known:
             try:

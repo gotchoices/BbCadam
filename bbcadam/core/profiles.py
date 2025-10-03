@@ -145,6 +145,21 @@ class Section:
             self._profile.go(dx=dx, dy=dy, r=r, a_deg=a_deg)
         return self
 
+    def end(self):
+        """Finalize the sketch/profile for visualization or further operations.
+        
+        For sketches (visible=True), this materializes the Sketcher object in FreeCAD.
+        For profiles, this prepares the geometry for operations like pad/revolve/sweep.
+        """
+        if self._sketch_visible:
+            # Materialize as a visible sketch
+            from ..backends.sketcher import SketcherProfileAdapter
+            adapter = SketcherProfileAdapter(self)
+            return adapter.build_sketch()
+        else:
+            # Just return self for method chaining
+            return self
+
     def arc(self, radius=None, dir='ccw', end=None, endAt=None, center=None, centerAt=None, sweep=None, tangent=False):
         """Add a circular arc. Modes:
         - center(+radius)+end
@@ -153,16 +168,37 @@ class Section:
         - radius+end+sweep (center inferred)
         """
         import math
-        # Map inputs
-        end_in = endAt if endAt is not None else end
-        center_in = centerAt if centerAt is not None else center
-        end_m = self._map_tuple(end_in) if end_in is not None else None
-        center_m = self._map_tuple(center_in) if center_in is not None else None
-
+        # Resolve inputs with plane mapping and relative semantics:
+        # - end/center are RELATIVE offsets in the sketch plane (added to current cursor)
+        # - endAt/centerAt are ABSOLUTE coordinates in the sketch plane
         # Current start
         if self._profile._cursor is None:
             raise RuntimeError('arc() called before from_()')
         sx, sy = self._profile._cursor
+
+        end_m = None
+        if endAt is not None:
+            # Absolute
+            end_m = self._map_tuple(endAt)
+        elif end is not None:
+            # Relative
+            dx, dy = self._map_tuple(end)
+            end_m = (float(sx) + float(dx), float(sy) + float(dy))
+
+        center_m = None
+        if centerAt is not None:
+            # Absolute
+            center_m = self._map_tuple(centerAt)
+        elif center is not None:
+            # Relative
+            cdx, cdy = self._map_tuple(center)
+            center_m = (float(sx) + float(cdx), float(sy) + float(cdy))
+
+
+        from .dsl_core import log
+        log('arc', f"Section.arc input: radius={radius}, dir={dir}, center={center}, centerAt={centerAt}, end={end}, endAt={endAt}, sweep={sweep}")
+        log('arc', f"Current position (start): ({sx}, {sy})")
+        log('arc', f"Resolved center_m: {center_m}, end_m: {end_m}")
 
         # If center not provided, infer from radius + end (+ dir/sweep)
         if center_m is None:
@@ -170,35 +206,76 @@ class Section:
                 raise ValueError('arc requires radius when center is omitted')
             if end_m is None and sweep is None:
                 raise ValueError('arc requires end or sweep to infer center')
-            if end_m is None:
-                raise ValueError('arc requires end to infer center')
-            ex, ey = float(end_m[0]) + 0.0, float(end_m[1]) + 0.0
-            vx, vy = ex - sx, ey - sy
-            chord_len = math.hypot(vx, vy)
-            if chord_len == 0:
-                raise ValueError('arc start and end coincide; use circle() or adjust end')
-            if float(radius) < chord_len / 2.0 - 1e-8:
-                raise ValueError('arc radius too small for given end')
-            mx, my = (sx + ex) / 2.0, (sy + ey) / 2.0
-            h = math.sqrt(max(float(radius) * float(radius) - (chord_len / 2.0) ** 2, 0.0))
-            nx, ny = -vy / chord_len, vx / chord_len
-            c1 = (mx + nx * h, my + ny * h)
-            c2 = (mx - nx * h, my - ny * h)
-            def _sweep_sign(center):
-                a0 = math.atan2(sy - center[1], sx - center[0])
-                a1 = math.atan2(ey - center[1], ex - center[0])
-                a0 = (a0 + 2*math.pi) % (2*math.pi)
-                a1 = (a1 + 2*math.pi) % (2*math.pi)
-                delta = a1 - a0
-                if delta < 0:
-                    delta += 2 * math.pi
-                return +1 if delta <= math.pi else -1
-            if sweep is not None:
-                want_ccw = float(sweep) > 0
-                center_m = c1 if (_sweep_sign(c1) > 0) == want_ccw else c2
+            # Case A: have end → infer center via perpendicular bisector (minor by default, dir picks side)
+            if end_m is not None:
+                ex, ey = float(end_m[0]) + 0.0, float(end_m[1]) + 0.0
+                vx, vy = ex - sx, ey - sy
+                chord_len = math.hypot(vx, vy)
+                if chord_len == 0:
+                    raise ValueError('arc start and end coincide; use circle() or adjust end')
+                if float(radius) < chord_len / 2.0 - 1e-8:
+                    raise ValueError('arc radius too small for given end')
+                mx, my = (sx + ex) / 2.0, (sy + ey) / 2.0
+                h = math.sqrt(max(float(radius) * float(radius) - (chord_len / 2.0) ** 2, 0.0))
+                nx, ny = -vy / chord_len, vx / chord_len
+                c1 = (mx + nx * h, my + ny * h)
+                c2 = (mx - nx * h, my - ny * h)
+                def _sweep_sign(center):
+                    a0 = math.atan2(sy - center[1], sx - center[0])
+                    a1 = math.atan2(ey - center[1], ex - center[0])
+                    a0 = (a0 + 2*math.pi) % (2*math.pi)
+                    a1 = (a1 + 2*math.pi) % (2*math.pi)
+                    delta = a1 - a0
+                    if delta < 0:
+                        delta += 2 * math.pi
+                    return +1 if delta <= math.pi else -1
+                if sweep is not None:
+                    # Use dir if provided to pick sign; else preserve sign of sweep
+                    if dir is not None:
+                        want_ccw = (str(dir).lower() == 'ccw')
+                    else:
+                        want_ccw = float(sweep) > 0
+                    center_m = c1 if (_sweep_sign(c1) > 0) == want_ccw else c2
+                else:
+                    pick_ccw = (str(dir).lower() == 'ccw')
+                    center_m = c1 if (_sweep_sign(c1) > 0) == pick_ccw else c2
+            # Case B: no end, but have sweep → infer center assuming tangency to previous segment
             else:
-                pick_ccw = (str(dir).lower() == 'ccw')
-                center_m = c1 if (_sweep_sign(c1) > 0) == pick_ccw else c2
+                # Determine previous tangent direction
+                tdx, tdy = 1.0, 0.0
+                ops = getattr(self._profile, '_geom_current', None)
+                if ops:
+                    last = ops[-1]
+                    if last[0] == 'line':
+                        x1, y1, x2, y2 = last[1]
+                        tdx, tdy = float(x2 - x1), float(y2 - y1)
+                    elif last[0] == 'arc':
+                        data = last[1]
+                        cxp, cyp = data['center']
+                        exp, eyp = data['end']
+                        vx, vy = float(exp - cxp), float(eyp - cyp)
+                        if str(data.get('dir', 'ccw')).lower() == 'ccw':
+                            tdx, tdy = -vy, vx
+                        else:
+                            tdx, tdy = vy, -vx
+                l = math.hypot(tdx, tdy) or 1.0
+                tdx, tdy = tdx / l, tdy / l
+                # Normal points to center depending on requested direction
+                if str(dir).lower() == 'ccw':
+                    nx, ny = -tdy, tdx
+                else:
+                    nx, ny = tdy, -tdx
+                cx, cy = sx + float(radius) * nx, sy + float(radius) * ny
+                center_m = (cx, cy)
+                # Compute end by rotating start around center by |sweep| with dir sign
+                ang = math.radians(abs(float(sweep)))
+                sign = +1 if str(dir).lower() == 'ccw' else -1
+                a0 = math.atan2(sy - cy, sx - cx)
+                a1 = a0 + sign * ang
+                exey = (cx + float(radius) * math.cos(a1), cy + float(radius) * math.sin(a1))
+                # Log only in end-based inference branches; c1/c2 not defined in sweep-only branch
+                log('arc', f"Center inference (end-based): chosen center_m={center_m}")
+                log('arc', f"Center inference (sweep-only): center_m={center_m}, exey={exey}")
 
         # If center is provided and end missing but sweep provided, infer end from sweep
         exey = end_m
@@ -206,11 +283,19 @@ class Section:
             cx, cy = float(center_m[0]), float(center_m[1])
             R = float(radius) if radius is not None else math.hypot(sx - cx, sy - cy)
             a0 = math.atan2(sy - cy, sx - cx)
-            a1 = a0 + math.radians(float(sweep))
+            # Use dir to choose direction; sweep magnitude in degrees
+            if dir is not None:
+                ang = math.radians(abs(float(sweep)))
+                sign = +1 if str(dir).lower() == 'ccw' else -1
+                a1 = a0 + sign * ang
+            else:
+                a1 = a0 + math.radians(float(sweep))
             exey = (cx + R * math.cos(a1), cy + R * math.sin(a1))
 
         # Pass absolute coordinates to the profile (centerAt/endAt)
-        self._profile.arc(radius=radius if radius is not None else math.hypot(sx - float(center_m[0]), sy - float(center_m[1])),
+        final_radius = radius if radius is not None else math.hypot(sx - float(center_m[0]), sy - float(center_m[1]))
+        log('arc', f"Calling _SectionProfile.arc with: radius={final_radius}, dir={dir}, centerAt={center_m}, endAt={exey}, sweep={sweep}")
+        self._profile.arc(radius=final_radius,
                           dir=dir,
                           end=None,
                           endAt=exey,
@@ -433,12 +518,15 @@ class _SectionProfile:
     def arc(self, radius, dir='ccw', end=None, endAt=None, center=None, centerAt=None, sweep=None):
         import math
         import Part
+        from .dsl_core import log
         if self._cursor is None:
             raise RuntimeError('arc() called before from_()')
         dir_l = str(dir).lower()
         if dir_l not in ('ccw', 'cw'):
             raise ValueError("arc dir must be 'ccw' or 'cw'")
         cx0, cy0 = self._cursor
+        log('arc', f"_SectionProfile.arc input: radius={radius}, dir={dir}, centerAt={centerAt}, endAt={endAt}")
+        log('arc', f"_SectionProfile current cursor: ({cx0}, {cy0})")
         if centerAt is not None:
             cx, cy = float(centerAt[0]), float(centerAt[1])
         elif center is not None:
@@ -462,6 +550,11 @@ class _SectionProfile:
         tol_rel = 1e-4
         ok_s = math.isclose(ds, R, rel_tol=tol_rel, abs_tol=tol_abs)
         ok_e = math.isclose(de, R, rel_tol=tol_rel, abs_tol=tol_abs)
+        log('arc', f"Validation: center=({cx}, {cy}), radius={R}")
+        log('arc', f"Distance start->center: {ds}, end->center: {de}")
+        log('arc', f"Validation ok_s={ok_s}, ok_e={ok_e}")
+        if not ok_s:
+            raise ValueError('arc start not on circle defined by center/radius')
         if not ok_e:
             raise ValueError('arc end not on circle defined by center/radius')
         sx, sy = cx0, cy0
@@ -491,7 +584,9 @@ class _SectionProfile:
             if abs(diff - math.pi) < 1e-8:
                 delta = math.pi if dir_l == 'ccw' else -math.pi
         else:
-            delta = math.radians(float(sweep))
+            # Respect dir for sweep direction; treat sweep as magnitude
+            sgn = +1 if dir_l == 'ccw' else -1
+            delta = sgn * math.radians(abs(float(sweep)))
         tol_ang = 1e-6
         if abs(delta) < tol_ang:
             raise ValueError('arc sweep too small (degenerate); adjust end or direction')

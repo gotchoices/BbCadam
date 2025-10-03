@@ -4,6 +4,11 @@ import sys
 from pathlib import Path
 
 import FreeCAD as App
+# Ensure no bytecode/pycache gets written even if environment is not honored
+try:
+    sys.dont_write_bytecode = True
+except Exception:
+    pass
 
 # Use package-level DSL facade (prefers new scaffold; api remains as reference)
 import bbcadam as dsl

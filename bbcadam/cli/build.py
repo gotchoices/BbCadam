@@ -90,6 +90,8 @@ def main():
 
     # Provide context via environment variables for runner to read
     env = os.environ.copy()
+    # Avoid writing __pycache__/pyc files during builds
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     env["BB_PROJECT_ROOT"] = str(project_root)
     env["BB_BUILD_DIR"] = str(build_dir)
     env["BB_SCRIPTS"] = os.pathsep.join(str(Path(s).resolve()) for s in args.scripts)

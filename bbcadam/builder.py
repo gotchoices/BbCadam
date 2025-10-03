@@ -217,22 +217,38 @@ def build_assembly_script(repo_root: Path, script_path: Path):
     params = _merge_params(project_params, asm_params)
     settings = _safe_read(root / 'config' / 'settings.yaml') or {}
 
-    # Capture original active doc and camera to restore after rebuild
+    doc_name = f'asm__{asm_name}'
+    # Capture the assembly's current camera if it exists, otherwise fall back to active doc
     orig_doc_name = None
     orig_cam = None
     try:
         import FreeCADGui as Gui  # type: ignore
-        if Gui.ActiveDocument:
-            orig_doc_name = Gui.ActiveDocument.Name
-            if Gui.ActiveDocument.ActiveView:
+        # Prefer the specific assembly document's view (tab may or may not be active)
+        try:
+            gdoc = Gui.getDocument(doc_name)
+        except Exception:
+            gdoc = None
+        if gdoc and getattr(gdoc, 'ActiveView', None):
+            try:
+                orig_cam = gdoc.ActiveView.getCamera()
+                orig_doc_name = doc_name
+            except Exception:
+                pass
+        # Fallback to whatever is currently active
+        if orig_cam is None and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
+            try:
+                orig_doc_name = Gui.ActiveDocument.Name
                 orig_cam = Gui.ActiveDocument.ActiveView.getCamera()
+            except Exception:
+                pass
     except Exception:
         pass
-
-    doc_name = f'asm__{asm_name}'
+    # Track whether an assembly doc already existed this session
+    doc_existed = False
     try:
         old = App.getDocument(doc_name)
         if old:
+            doc_existed = True
             App.closeDocument(doc_name)
     except Exception:
         pass
@@ -437,9 +453,8 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                         Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
                     except Exception:
                         pass
-                elif True:
-                    # For assemblies we always fit on first creation of asm doc in session
-                    # Detect first creation by checking if the doc has exactly 0 or 1 objects pre-link
+                elif not doc_existed:
+                    # First ever assembly build in this session: fit once
                     try:
                         App.setActiveDocument(doc.Name)
                     except Exception:

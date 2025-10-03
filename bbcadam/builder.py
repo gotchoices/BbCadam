@@ -104,11 +104,13 @@ def build_part_script(repo_root: Path, script_path: Path):
     # Document lifecycle: reuse existing doc to preserve view; remove prior result object if present
     doc_name = f'part__{part_name}'
     doc = None
+    doc_was_missing = False
     try:
         doc = App.getDocument(doc_name)
     except Exception:
         doc = None
     if doc is None:
+        doc_was_missing = True
         doc = App.newDocument(doc_name)
     else:
         try:
@@ -153,6 +155,7 @@ def build_part_script(repo_root: Path, script_path: Path):
                 from PySide2.QtCore import QTimer  # type: ignore
             def _restore_part_view():
                 try:
+                    # Always attempt to reactivate the previously active document first
                     if orig_doc_name:
                         try:
                             App.setActiveDocument(orig_doc_name)
@@ -162,8 +165,32 @@ def build_part_script(repo_root: Path, script_path: Path):
                             Gui.activateDocument(orig_doc_name)
                         except Exception:
                             pass
+                    # If we captured a prior camera, restore it
                     if orig_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
-                        Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
+                        try:
+                            Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
+                        except Exception:
+                            pass
+                    elif doc_was_missing:
+                        # First build of this document in this session: fit to extents
+                        try:
+                            Gui.activateDocument(doc.Name)
+                        except Exception:
+                            pass
+                        v = None
+                        try:
+                            v = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None
+                        except Exception:
+                            v = None
+                        if v:
+                            try:
+                                v.viewAxonometric()
+                            except Exception:
+                                pass
+                            try:
+                                v.fitAll()
+                            except Exception:
+                                pass
                 except Exception:
                     pass
             QTimer.singleShot(0, _restore_part_view)
@@ -379,6 +406,7 @@ def build_assembly_script(repo_root: Path, script_path: Path):
             from PySide2.QtCore import QTimer  # type: ignore
         def _restore_asm_view():
             try:
+                # Always attempt to reactivate the previously active document first
                 if orig_doc_name:
                     try:
                         App.setActiveDocument(orig_doc_name)
@@ -388,8 +416,33 @@ def build_assembly_script(repo_root: Path, script_path: Path):
                         Gui.activateDocument(orig_doc_name)
                     except Exception:
                         pass
+                # If we captured a prior camera, restore it
                 if orig_cam and Gui.ActiveDocument and Gui.ActiveDocument.ActiveView:
-                    Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
+                    try:
+                        Gui.ActiveDocument.ActiveView.setCamera(orig_cam)
+                    except Exception:
+                        pass
+                elif True:
+                    # For assemblies we always fit on first creation of asm doc in session
+                    # Detect first creation by checking if the doc has exactly 0 or 1 objects pre-link
+                    try:
+                        Gui.activateDocument(doc.Name)
+                    except Exception:
+                        pass
+                    v = None
+                    try:
+                        v = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None
+                    except Exception:
+                        v = None
+                    if v:
+                        try:
+                            v.viewAxonometric()
+                        except Exception:
+                            pass
+                        try:
+                            v.fitAll()
+                        except Exception:
+                            pass
             except Exception:
                 pass
         QTimer.singleShot(0, _restore_asm_view)

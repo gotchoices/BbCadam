@@ -16,7 +16,7 @@ git clone https://github.com/gotchoices/BbCadam.git
 cd BbCadam
 python -m venv .venv && source .venv/bin/activate
 pip install -U pip
-pip install -e .
+pip install -e .[dev]  # Installs BbCadam + dev dependencies (pytest, etc.)
 ```
 
 This creates a virtual environment **inside the BbCadam repository** for framework development. Use this environment to:
@@ -30,12 +30,18 @@ After modifying BbCadam source code, test your changes in actual CAD projects:
 
 ```bash
 # In your CAD project directory (separate from BbCadam repo)
-cd /path/to/myproject
-source .venv/bin/activate  # Project's own venv
-pip install -e /path/to/BbCadam  # Link to your development version
+cd /path/to/myproject  # e.g., bb/kwave
+
+# Create project venv if it doesn't exist
+python -m venv .venv
+source .venv/bin/activate  # Activate project's own venv
+
+pip install -e ../BbCadam  # Link to your development version (relative path)
+# or: pip install -e /full/path/to/bb/BbCadam  # absolute path
 
 # Now your project uses your modified BbCadam
-bbcadam-build specs/parts/mypart/mypart.py
+bbcadam-launch  # Launch FreeCAD with watcher (defaults to current directory)
+# or: bbcadam-build specs/parts/mypart/mypart.py  # Headless build
 ```
 
 This creates a **separate environment** for your CAD project that links to your modified BbCadam source. Use this to:

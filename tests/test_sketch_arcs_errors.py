@@ -15,7 +15,7 @@ def build_part(ctx):
     s.close()
     s.pad(1).add()
 """
-    run_abbrev_script_expect_failure(src, tmp_path, "end not on circle")
+    run_abbrev_script_expect_failure(src, tmp_path, "start not on circle")
 
 
 def test_arc_start_equals_end(tmp_path: Path):

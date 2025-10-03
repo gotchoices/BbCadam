@@ -100,6 +100,10 @@ Profile.revolve(angle_deg=360, axis='Z')
 Profile.sweep(path_profile)  # sweep along a path Profile (lines/arcs)
 ```
 
+Notes:
+- `pad/revolve/sweep` auto-close the current path if needed to produce a face (no need to call `close()` explicitly unless you only want a materialized sketch).
+- At end-of-build, any pending (uncommitted) Feature is implicitly added; explicit `.add()` remains supported for chaining/control.
+
 Holes: include inner profiles (e.g., `circle` inside a `rectangle`), then `pad` to produce solids with voids.
 
 Composite feature (build a tool, then apply):
@@ -225,17 +229,20 @@ Plane specifiers:
 
 ### 2D Arc specification and validation
 - Signature: `arc(radius=None, dir='ccw', end=None|endAt=None, center=None|centerAt=None, sweep=None, tangent=False)`
+- Semantics (relative vs absolute):
+  - `end`, `center` are RELATIVE offsets to the current cursor in the sketch plane
+  - `endAt`, `centerAt` are ABSOLUTE coordinates in the sketch plane
 - Supported minimal combos (S=start, C=center, E=end, R=radius, θ=sweep, D=dir, T=tangent):
   - C + E [+R optional] → R inferred from |CS| (must match |CE|); θ from geometry and D (minor by default)
-  - C + θ [+R optional] → E inferred (R from |CS| if not given)
-  - C + R + θ → E inferred
+  - C + θ [+R optional] → E inferred (R from |CS| if not given); θ is a magnitude; D supplies direction (ccw positive)
+  - C + R + θ → E inferred (θ as above)
   - R + E + D → C inferred (two solutions; D picks side); θ defaults to minor unless provided
-  - R + E + θ → C inferred; sign(θ) encodes direction
-  - R + θ + T → C and E inferred using start tangency; sign(θ) or D picks side
+  - R + E + θ → C inferred; θ magnitude with sign from D if provided, else sign(θ)
+  - R + θ + T → C and E inferred using start tangency; sign from D or θ
 - Underconstrained examples: C+R only; R+E only (needs D or θ or T); singletons (R or E or θ) are invalid.
 - Validation:
   - dir must be `'ccw'` or `'cw'` if used; radius > 0
-  - Start/end must lie at distance R from C (tolerance ~1e-4) when provided
+  - Start and end must lie at distance R from C (tolerance ~1e-4) when provided
   - Degenerate sweeps rejected; full-circle via `arc()` rejected (use `circle()`)
   - Coordinates respect profile plane mapping (XY/XZ/YZ)
 

@@ -16,8 +16,8 @@ def build_part(ctx):
     seg3 = param('seg3', 20)
     thick = 5.0
 
-    # Exact path from worm.py lines 21-35 - using sketch like original
-    p = sketch(name='worm_path', plane='XY', at=(0, 0, 0), visible=True)
+    # Exact path from worm.py lines 21-35 - using profile (part-based)
+    p = profile(name='worm_path', plane='XY', at=(0, 0, 0))
     p.from_(x=0, y=0)
     p.go(dx=seg1, dy=0)
     # 90° CCW arc with given radius; let center be inferred

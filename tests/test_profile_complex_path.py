@@ -35,10 +35,10 @@ def build_part(ctx):
 
     # Add segment back to Y axis, then finalize closure and pad
     p.to(x=0)
-    p.close()
+    p.to(y=0)
 
     # Pad the closed sketch to produce a solid for measurable assertions
-    p.pad(5).add()
+    p.pad(5)
 
 
 def test_profile_complex_path_chain():

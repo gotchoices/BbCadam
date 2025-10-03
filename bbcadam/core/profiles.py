@@ -312,15 +312,62 @@ class Section:
     # 3D ops
     def pad(self, dist, dir='+'):
         """Extrude the closed profile by dist along section normal (sign by dir)."""
-        return self._backend.pad(self, dist, dir)
+        # Auto-close the current path if not already finalized
+        try:
+            has_outer = getattr(self._profile, '_outer_wire', None) is not None
+        except Exception:
+            has_outer = False
+        if not has_outer:
+            try:
+                self._profile.close()
+            except Exception:
+                pass
+        feat = self._backend.pad(self, dist, dir)
+        # Mark pending feature for implicit add at end-of-build
+        try:
+            from .dsl_core import _STATE
+            _STATE['pending_feature'] = feat.shape
+        except Exception:
+            pass
+        return feat
 
     def revolve(self, angle_deg=360.0, axis='Y'):
         """Revolve the closed profile around X/Y/Z by angle_deg degrees."""
-        return self._backend.revolve(self, angle_deg, axis)
+        try:
+            has_outer = getattr(self._profile, '_outer_wire', None) is not None
+        except Exception:
+            has_outer = False
+        if not has_outer:
+            try:
+                self._profile.close()
+            except Exception:
+                pass
+        feat = self._backend.revolve(self, angle_deg, axis)
+        try:
+            from .dsl_core import _STATE
+            _STATE['pending_feature'] = feat.shape
+        except Exception:
+            pass
+        return feat
 
     def sweep(self, path_section):
         """Sweep the closed profile along an open path defined by another Section."""
-        return self._backend.sweep(self, path_section)
+        try:
+            has_outer = getattr(self._profile, '_outer_wire', None) is not None
+        except Exception:
+            has_outer = False
+        if not has_outer:
+            try:
+                self._profile.close()
+            except Exception:
+                pass
+        feat = self._backend.sweep(self, path_section)
+        try:
+            from .dsl_core import _STATE
+            _STATE['pending_feature'] = feat.shape
+        except Exception:
+            pass
+        return feat
 
     # --- 3D path rough-ins ---
     def to3d(self, x=None, y=None, z=None):

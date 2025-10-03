@@ -14,6 +14,7 @@ def build_part(ctx):
     seg1 = param('seg1', 30)
     seg2 = param('seg2', 25)
     seg3 = param('seg3', 20)
+    thick = 5.0
 
     # Exact path from worm.py lines 21-35 - using sketch like original
     p = sketch(name='worm_path', plane='XY', at=(0, 0, 0), visible=True)
@@ -38,7 +39,7 @@ def build_part(ctx):
     p.to(y=0)
 
     # Pad the closed sketch to produce a solid for measurable assertions
-    p.pad(5)
+    p.pad(thick)
 
 
 def test_profile_complex_path_chain():
@@ -49,7 +50,11 @@ def test_profile_complex_path_chain():
     result = run_build_part_callable(build_part, work_dir)
     
     # Basic validation - now we have a solid and sane extents
-    assert result['volume'] > 0
+    vol = result['volume']
+    print(f"[complex_path] volume={vol}")
+    # Lock in volume to catch arc-direction regressions (rounded empirical)
+    expected_vol = 17891.10
+    assert abs(vol - expected_vol) < 0.1
     bbox = result['bbox']
-    assert bbox['xMax'] >= 50.0 - 1e-6
-    assert bbox['yMax'] >= 20.0 + 25.0 - 1e-6
+    assert bbox[3] >= 50.0 - 1e-6  # xMax
+    assert bbox[4] >= 45.0 - 1e-6  # yMax (20 + 25)
